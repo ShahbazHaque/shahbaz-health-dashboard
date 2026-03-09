@@ -82,6 +82,146 @@ export async function extractVoiceLog(transcription) {
     }
 }
 
+// ============================================================
+// GEMINI VISION — Photo-based data extraction
+// ============================================================
+
+/**
+ * Convert a File object to base64 string (without data URL prefix).
+ */
+export function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const base64 = reader.result.split(',')[1]; // Strip "data:image/...;base64,"
+            resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+/**
+ * Scan a medicine label/box photo → extract drug details.
+ */
+export async function scanMedicineLabel(imageBase64, mimeType = 'image/jpeg') {
+    if (!genAI) throw new Error('Gemini API key not configured');
+
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+            responseMimeType: 'application/json',
+        }
+    });
+
+    const result = await model.generateContent([
+        { inlineData: { mimeType, data: imageBase64 } },
+        { text: `You are a clinical pharmacology extraction AI. Analyze this image of a medication label, box, or bottle.
+
+Extract ALL visible information and return strict JSON:
+{
+  "drug_name": "generic name (brand name if visible)",
+  "dose": "e.g. 40mg",
+  "frequency": "e.g. Once daily",
+  "drug_class": "e.g. Statin, Beta-blocker, Antiplatelet",
+  "route": "oral|IV|IM|SC|topical|inhaled",
+  "target": "clinical target if inferrable, e.g. LDL-C <55 mg/dL",
+  "expiration_date": "YYYY-MM or null",
+  "manufacturer": "if visible or null",
+  "confidence": 0.0-1.0,
+  "extraction_notes": "any issues with image quality or partial reads"
+}
+
+If you cannot read the image clearly, set confidence below 0.5 and explain in extraction_notes.` }
+    ]);
+
+    return JSON.parse(result.response.text());
+}
+
+/**
+ * Scan a lab results document/photo → extract test values.
+ */
+export async function scanLabResults(imageBase64, mimeType = 'image/jpeg') {
+    if (!genAI) throw new Error('Gemini API key not configured');
+
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+            responseMimeType: 'application/json',
+        }
+    });
+
+    const result = await model.generateContent([
+        { inlineData: { mimeType, data: imageBase64 } },
+        { text: `You are a clinical pathology data extraction AI. Analyze this image of a laboratory report.
+
+Extract ALL numerical lab values visible. Use these standardized metric_type names:
+ldl_cholesterol, hdl_cholesterol, total_cholesterol, triglycerides, hba1c, glucose,
+apob, lpa, creatinine, egfr, alt, ast, crp, tsh, vitamin_d, iron, ferritin,
+systolic_bp, diastolic_bp, white_blood_cells, hemoglobin, platelets
+
+Return strict JSON:
+{
+  "test_date": "YYYY-MM-DD (from report header/date stamp)",
+  "lab_name": "facility name if visible or null",
+  "results": [
+    { "metric_type": "ldl_cholesterol", "value": 48, "unit": "mg/dL", "reference_range": "<100 mg/dL", "flag": "normal|high|low|critical" }
+  ],
+  "confidence": 0.0-1.0,
+  "extraction_notes": "any issues"
+}
+
+If a date is not visible, use null for test_date. Extract EVERY readable value.` }
+    ]);
+
+    return JSON.parse(result.response.text());
+}
+
+/**
+ * Scan an ECG report/printout photo → extract findings.
+ */
+export async function scanECGReport(imageBase64, mimeType = 'image/jpeg') {
+    if (!genAI) throw new Error('Gemini API key not configured');
+
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+            responseMimeType: 'application/json',
+        }
+    });
+
+    const result = await model.generateContent([
+        { inlineData: { mimeType, data: imageBase64 } },
+        { text: `You are a cardiology ECG interpretation AI. Analyze this ECG report or printout image.
+
+The patient is a 45-year-old male with ASHD of native coronary artery, chronic IHD, old myocardial infarction (OMI), and hyperlipidaemia. On Rosuvastatin 40mg, Bisoprolol 2.5mg, Aspirin 75mg.
+
+Extract ALL available information and return strict JSON:
+{
+  "interpretation": "e.g. Normal sinus rhythm, ST elevation in leads II/III/aVF",
+  "heart_rate": 68,
+  "pr_interval": 160,
+  "qrs_duration": 88,
+  "qtc_interval": 420,
+  "axis_degrees": 45,
+  "rhythm": "e.g. Sinus rhythm, Atrial fibrillation",
+  "abnormalities": ["list", "of", "findings"],
+  "recommendations": "clinical notes if present",
+  "test_datetime": "YYYY-MM-DDTHH:MM:SS or just YYYY-MM-DD if time not visible",
+  "confidence": 0.0-1.0,
+  "extraction_notes": "any issues with image quality"
+}
+
+Set any unavailable numeric field to null. If you cannot interpret the ECG, set confidence below 0.5.` }
+    ]);
+
+    return JSON.parse(result.response.text());
+}
+
+// ============================================================
+// DR. KUZBURY CHAT
+// ============================================================
+
 /**
  * Chat with Dr. Kuzbury persona.
  */

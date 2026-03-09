@@ -4,6 +4,7 @@ import KuzburyChat from './components/KuzburyChat';
 import MedicationManager from './components/MedicationManager';
 import GlidePathChart from './components/GlidePathChart';
 import ClinicianReport from './components/ClinicianReport';
+import DataCapture from './components/DataCapture';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
@@ -585,9 +586,9 @@ export default function App() {
       ) : (<>
         {/* Navigation */}
         <div className="nav-tabs no-print">
-          {['overview', 'medications', 'vitals', 'body', 'clinical', 'insights', 'report'].map(tab => (
+          {['overview', 'medications', 'vitals', 'body', 'clinical', 'insights', 'add-data', 'report'].map(tab => (
             <button key={tab} className={`nav-tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
-              {tab === 'overview' ? '📊 Overview' : tab === 'medications' ? '💊 Medications' : tab === 'vitals' ? '❤️ Vitals' : tab === 'body' ? '🏋️ Body' : tab === 'clinical' ? '🩸 Clinical' : tab === 'insights' ? '💡 Insights' : '📄 Report'}
+              {tab === 'overview' ? '📊 Overview' : tab === 'medications' ? '💊 Medications' : tab === 'vitals' ? '❤️ Vitals' : tab === 'body' ? '🏋️ Body' : tab === 'clinical' ? '🩸 Clinical' : tab === 'insights' ? '💡 Insights' : tab === 'add-data' ? '➕ Add Data' : '📄 Report'}
             </button>
           ))}
         </div>
@@ -846,6 +847,11 @@ export default function App() {
             ))
           )}
         </>)}
+        {/* ===== ADD DATA TAB ===== */}
+        {activeTab === 'add-data' && (
+          <DataCapture supabase={supabase} onDataAdded={loadData} />
+        )}
+
         {/* ===== REPORT TAB ===== */}
         {activeTab === 'report' && (
           <ClinicianReport
