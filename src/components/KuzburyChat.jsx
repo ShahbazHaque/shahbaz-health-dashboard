@@ -154,7 +154,7 @@ export default function KuzburyChat() {
                 )}
 
                 <div className="kuzbury-header">
-                    <img src="/dr_kuzbury.jpg" alt="Dr. Kuzbury" className="avatar" />
+                    <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" className="avatar" />
                     <div>
                         <h2>Dr. Kuzbury is online</h2>
                         <p className="subtitle">Your N=1 AI Cardiologist</p>
@@ -165,7 +165,7 @@ export default function KuzburyChat() {
                 <div className="chat-window" ref={scrollRef}>
                     {chatHistory.map((msg, i) => (
                         <div key={i} className={`chat-bubble ${msg.role}`}>
-                            {msg.role === 'model' && <img src="/dr_kuzbury.jpg" alt="Dr. Kuzbury" className="chat-avatar" />}
+                            {msg.role === 'model' && <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" className="chat-avatar" />}
                             <div className="chat-text">{msg.text}</div>
                         </div>
                     ))}
@@ -173,7 +173,7 @@ export default function KuzburyChat() {
                     {/* Processing Indicator */}
                     {status === 'processing' && (
                         <div className="chat-bubble model processing">
-                            <img src="/dr_kuzbury.jpg" alt="Dr. Kuzbury" className="chat-avatar" />
+                            <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" className="chat-avatar" />
                             <div className="chat-text"><Loader size={16} className="spin" /> Analyzing Clinical Data...</div>
                         </div>
                     )}
