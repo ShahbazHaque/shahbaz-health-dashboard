@@ -1,5 +1,5 @@
 # Shahbaz Health Dashboard — Master Project Context
-**Last Updated:** 2026-03-09 (Post Data Capture feature)
+**Last Updated:** 2026-03-12 (GitHub Pages deployment + CI/CD)
 
 ---
 
@@ -14,8 +14,12 @@
   ```
   - ⚠️ First run: `npm install @rollup/rollup-linux-arm64-gnu --no-save`
   - ⚠️ Use `cacheDir: '/tmp/vite-cache'` to avoid EPERM errors on mounted Mac folder
-- **URL:** `http://localhost:5173`
+- **URL (local):** `http://localhost:5173`
+- **URL (live):** `https://shahbazhaque.github.io/shahbaz-health-dashboard/`
 - **GitHub:** `https://github.com/ShahbazHaque/shahbaz-health-dashboard`
+- **CI/CD:** GitHub Actions auto-deploys to GitHub Pages on every push to `main`
+- **Vite base:** `base: '/shahbaz-health-dashboard/'` in `vite.config.js` (required for GitHub Pages)
+- **Secrets:** `VITE_GEMINI_API_KEY` stored as GitHub repo secret for CI builds
 
 ---
 
@@ -66,8 +70,11 @@
 
 ---
 
-## File Structure (Audited 2026-03-09)
+## File Structure (Audited 2026-03-12)
 ```
+.github/
+  workflows/
+    deploy.yml             # GitHub Actions: build + deploy to GitHub Pages on push to main
 src/
   App.jsx                  # ~880 lines. Main app. 8-tab dashboard. Supabase data loading.
                            # Supabase URL+key HARDCODED lines 11-13 (security debt)
@@ -75,9 +82,11 @@ src/
                            # State: summaries, insights, latestVitals, latestBody, labResults, medications, adherenceRate
                            # loadData() fetches all tables on mount
                            # generateInsights() is rule-based threshold checks only
+                           # Images use import.meta.env.BASE_URL for GitHub Pages compatibility
   App.css
   components/
     KuzburyChat.jsx        # 238 lines. AI chat + voice dictation.
+                           # Images use import.meta.env.BASE_URL for GitHub Pages compatibility
                            # BUG: extractVoiceLog() result console.log'd, NEVER persisted to DB
                            # BUG: No patient context injected — Kuzbury is completely data-blind
                            # BUG: Greeting falsely claims to have "fully reviewed historical data"
@@ -113,11 +122,13 @@ backend/
   requirements.txt
 compute-summaries.mjs      # Node: recompute daily_summary from raw vitals
 import-data.mjs            # Node: Apple Health XML ZIP import to Supabase. No --since flag yet.
+vite.config.js             # Vite config. base: '/shahbaz-health-dashboard/' for GitHub Pages.
 ```
 
 ---
 
-## Completed Work (Priority 1 — All Done ✅)
+## Completed Work
+### Priority 1 — Core Dashboard ✅
 - [x] Apple Health data import pipeline (import-data.mjs)
 - [x] Dr. Kuzbury AI chat with Gemini 2.5 Flash
 - [x] Voice dictation (Web Speech API, continuous, interim results)
@@ -125,11 +136,22 @@ import-data.mjs            # Node: Apple Health XML ZIP import to Supabase. No -
 - [x] Clinical biomarkers from real `lab_results` table
 - [x] Clinician Report — live data, PDF print
 - [x] Health score computation + rule-based insights
-- [x] 8-tab dark-theme dashboard (added "Add Data" tab)
-- [x] Data Capture tab — Gemini Vision photo scanning (medicine labels, lab results, ECG reports)
-- [x] Data Capture tab — Apple Health quick upload (reused existing pipeline)
-- [x] Data Capture tab — Quick BP manual entry
+- [x] 8-tab dark-theme dashboard
+
+### Data Capture — Add Data Tab ✅
+- [x] Gemini Vision photo scanning (medicine labels, lab results, ECG reports)
+- [x] Apple Health quick upload (reused existing pipeline)
+- [x] Quick BP manual entry
 - [x] ecg_results Supabase table created
+
+### Infrastructure — GitHub Pages + CI/CD ✅ (2026-03-12)
+- [x] GitHub repo: https://github.com/ShahbazHaque/shahbaz-health-dashboard
+- [x] GitHub Actions workflow (`.github/workflows/deploy.yml`) — auto-deploy on push to main
+- [x] Live app: https://shahbazhaque.github.io/shahbaz-health-dashboard/
+- [x] Vite `base` config for GitHub Pages subpath
+- [x] `VITE_GEMINI_API_KEY` stored as GitHub repo secret
+- [x] All image paths use `import.meta.env.BASE_URL` for GitHub Pages compatibility
+- [x] `gh` CLI authenticated with `repo` + `workflow` scopes
 
 ---
 
@@ -217,14 +239,15 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 ---
 
 ### ⚪ SPRINT 6 — Security & Polish (Do last)
-- Move Supabase URL + anon key to `.env.local`
-- Move Gemini API key to backend
+- Move Supabase URL + anon key to `.env.local` + GitHub secrets
+- Move Gemini API key to backend (currently client-side, secret in GitHub Actions only protects build)
 - Add Supabase Auth + RLS policies
 - Remove orphaned VoiceCapture.jsx + VoiceCapture.css
 - Mobile responsive tabs
 - Proper favicon + page title
 - FastAPI backend: connect real DB, move LLM server-side
 - ElevenLabs voice agent integration (agent ID exists, no code yet)
+- Consider custom domain for GitHub Pages
 
 ---
 
@@ -244,8 +267,10 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 2. Start dev server (Node API method in Quick Resume above)
 3. Check current sprint status below and continue
 
-## Current Status (2026-03-09)
+## Current Status (2026-03-12)
 - **Data Capture (Add Data tab):** COMPLETE — all 5 data entry methods working
+- **GitHub Pages + CI/CD:** COMPLETE — live at https://shahbazhaque.github.io/shahbaz-health-dashboard/
+- **Image paths:** FIXED — all use `import.meta.env.BASE_URL` for GitHub Pages compatibility
 - **Next up:** Sprint 1 — AI Intelligence
   - S1.1: Enhanced System Prompt (~30 min) — expand Kuzbury's 6-line prompt to full clinical knowledge
   - S1.2: Context Injection (~2 hrs) — give Kuzbury live access to patient data via `buildPatientContext()`
