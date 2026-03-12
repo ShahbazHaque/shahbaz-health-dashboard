@@ -550,7 +550,7 @@ export default function App() {
       {/* Header */}
       <div className="header no-print">
         <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <img src="/dr_kuzbury.jpg" alt="Dr. Kuzbury" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.1)' }} />
+          <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.1)' }} />
           <div>
             <h1 style={{ margin: 0, padding: 0 }}>Dr. Kuzbury</h1>
             <p style={{ margin: '4px 0 0 0', padding: 0 }}>{hasData ? `AI Cardiologist • Last sync: ${latestSummary?.date || 'N/A'}` : 'Your Personal AI Cardiologist'}</p>
@@ -566,7 +566,7 @@ export default function App() {
 
       {!hasData ? (
         <div className="empty-state">
-          <img src="/dr_kuzbury.jpg" alt="Dr. Kuzbury" style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)', marginBottom: '24px' }} />
+          <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)', marginBottom: '24px' }} />
           <h3>"Good morning Shahbaz, I'm Dr. Kuzbury."</h3>
           <p>Import your base historical vitals from Apple Health so I can begin formulating your N=1 clinical baseline and trajectory.</p>
           <button className="btn btn-primary" onClick={() => setShowUpload(true)} style={{ margin: '0 auto' }}>
