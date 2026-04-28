@@ -1,5 +1,15 @@
 # Shahbaz Health Dashboard — Master Project Context
-**Last Updated:** 2026-03-09 (Post Data Capture feature)
+**Last Updated:** 2026-04-28
+**Priority:** TOP PRIORITY PROJECT
+
+---
+
+## Mission
+This project has two phases:
+1. **Phase 1 — Build:** Complete the health dashboard app (Sprints 1-6 below)
+2. **Phase 2 — Use:** Actively track and manage Shahbaz's health data day-to-day using the finished app
+
+Claude's role: Development partner for Phase 1, then health data management assistant for Phase 2. Always be driving toward completion of the next sprint item.
 
 ---
 
@@ -229,7 +239,7 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 ---
 
 ## Known Bugs
-1. **Kuzbury greeting lies** — "I have fully reviewed all your historical data" — he has ZERO data access
+1. ~~**Kuzbury greeting lies**~~ — FIXED: greeting is now honest, context loaded on mount
 2. **Voice extraction lost** — `extractVoiceLog()` results only `console.log`'d, never saved
 3. **Vite startup** — `npm run dev` fails in Cowork; use Node API with `cacheDir: '/tmp/vite-cache'`
 4. **getDaysSupply() synthetic** — calculated from `med.created_at`, not actual refill cycles
@@ -244,9 +254,10 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 2. Start dev server (Node API method in Quick Resume above)
 3. Check current sprint status below and continue
 
-## Current Status (2026-03-09)
+## Current Status (2026-04-28)
 - **Data Capture (Add Data tab):** COMPLETE — all 5 data entry methods working
-- **Next up:** Sprint 1 — AI Intelligence
-  - S1.1: Enhanced System Prompt (~30 min) — expand Kuzbury's 6-line prompt to full clinical knowledge
-  - S1.2: Context Injection (~2 hrs) — give Kuzbury live access to patient data via `buildPatientContext()`
-  - S1.3: Daily Briefing (~1.5 hrs) — proactive health summary on app load
+- **Sprint 1 — AI Intelligence:** COMPLETE
+  - S1.1: Enhanced System Prompt ✅ — full clinical prompt with patient profile, meds, targets, red flags, lifestyle guidance
+  - S1.2: Context Injection ✅ — `buildPatientContext(supabase)` queries live data, passed to every chat call
+  - S1.3: Daily Briefing ✅ — `generateDailyBriefing(supabase)` runs on app load, displays on Overview tab
+- **Next up:** Sprint 2 — Data Tracking (BP Logger, Lab Entry Form, Symptom Diary)
