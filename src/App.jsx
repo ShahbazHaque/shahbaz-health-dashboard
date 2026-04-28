@@ -5,6 +5,8 @@ import MedicationManager from './components/MedicationManager';
 import GlidePathChart from './components/GlidePathChart';
 import ClinicianReport from './components/ClinicianReport';
 import DataCapture from './components/DataCapture';
+import BPLogger from './components/BPLogger';
+import { generateDailyBriefing } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
@@ -473,7 +475,16 @@ export default function App() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData().then(() => {
+      // Generate daily briefing after data loads
+      setBriefingLoading(true);
+      generateDailyBriefing(supabase).then(briefing => {
+        setDailyBriefing(briefing);
+        setBriefingLoading(false);
+      }).catch(() => setBriefingLoading(false));
+    });
+  }, []);
 
   const latestSummary = summaries.length ? summaries[summaries.length - 1] : null;
   const prevSummary = summaries.length > 1 ? summaries[summaries.length - 2] : null;
@@ -500,6 +511,13 @@ export default function App() {
   const [labResults, setLabResults] = useState([]);
   const [medications, setMedications] = useState([]);
   const [adherenceRate, setAdherenceRate] = useState(null);
+
+  // Daily briefing state
+  const [dailyBriefing, setDailyBriefing] = useState(null);
+  const [briefingLoading, setBriefingLoading] = useState(false);
+
+  // BP Logger modal state
+  const [showBPLogger, setShowBPLogger] = useState(false);
 
   // Build clinicalData from real lab_results table
   const clinicalData = useMemo(() => {
@@ -595,8 +613,23 @@ export default function App() {
 
         {/* ===== OVERVIEW TAB ===== */}
         {activeTab === 'overview' && (<>
+          {/* Daily Briefing */}
+          {(dailyBriefing || briefingLoading) && (
+            <div className="card fade-in" style={{ marginBottom: '24px', borderLeft: '4px solid var(--accent)' }}>
+              <div className="card-header">
+                <span className="card-icon">🩺</span>
+                <h3>Daily Briefing from Dr. Kuzbury</h3>
+              </div>
+              {briefingLoading ? (
+                <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Analysing your latest health data...</p>
+              ) : (
+                <p style={{ color: 'var(--text-primary)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{dailyBriefing}</p>
+              )}
+            </div>
+          )}
+
           <div style={{ marginBottom: '24px' }}>
-            <KuzburyChat />
+            <KuzburyChat supabase={supabase} />
           </div>
           <div className="cards-grid" style={{ gridTemplateColumns: '300px 1fr', marginBottom: '24px' }}>
             {/* Health Score */}
@@ -864,6 +897,35 @@ export default function App() {
           />
         )}
       </>)}
+
+      {/* BP Logger FAB — visible on Overview and Vitals tabs */}
+      {(activeTab === 'overview' || activeTab === 'vitals') && (
+        <button
+          onClick={() => setShowBPLogger(true)}
+          title="Log Blood Pressure"
+          style={{
+            position: 'fixed', bottom: '28px', right: '28px', zIndex: 900,
+            width: '56px', height: '56px', borderRadius: '50%', border: 'none',
+            background: 'var(--accent, #00cc88)', color: '#000', cursor: 'pointer',
+            fontSize: '24px', fontWeight: '700', boxShadow: '0 4px 20px rgba(0,204,136,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'transform 0.2s'
+          }}
+          onMouseEnter={e => e.target.style.transform = 'scale(1.1)'}
+          onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+        >
+          🩸
+        </button>
+      )}
+
+      {/* BP Logger Modal */}
+      {showBPLogger && (
+        <BPLogger
+          supabase={supabase}
+          onClose={() => setShowBPLogger(false)}
+          onSaved={loadData}
+        />
+      )}
     </div>
   );
 }

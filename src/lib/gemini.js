@@ -219,28 +219,261 @@ Set any unavailable numeric field to null. If you cannot interpret the ECG, set 
 }
 
 // ============================================================
-// DR. KUZBURY CHAT
+// DR. KUZBURY CHAT — Enhanced Clinical AI
 // ============================================================
 
 /**
- * Chat with Dr. Kuzbury persona.
+ * Build a live patient context snapshot from Supabase data.
+ * This is prepended to each chat message so Kuzbury has real-time awareness.
  */
-export async function chatWithKuzbury(message, history = []) {
+export async function buildPatientContext(supabase) {
+    if (!supabase) return '';
+
+    try {
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const ninetyDaysAgo = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Fetch latest vitals (most recent of each type)
+        const vitalTypes = ['resting_heart_rate', 'hrv', 'blood_oxygen', 'steps', 'blood_pressure_systolic', 'blood_pressure_diastolic'];
+        const vitalsPromises = vitalTypes.map(type =>
+            supabase.from('vitals').select('metric_type, value, unit, recorded_at')
+                .eq('metric_type', type).order('recorded_at', { ascending: false }).limit(1)
+        );
+
+        // Fetch latest body composition
+        const bodyPromise = supabase.from('body_composition').select('metric_type, value, unit, recorded_at')
+            .eq('metric_type', 'weight').order('recorded_at', { ascending: false }).limit(1);
+
+        // Fetch latest lab results
+        const labPromise = supabase.from('lab_results').select('metric_type, value, unit, test_date')
+            .order('test_date', { ascending: false }).limit(10);
+
+        // Fetch medication adherence (30-day)
+        const adherencePromise = supabase.from('medication_log').select('medication_id, taken, log_date')
+            .gte('log_date', thirtyDaysAgo.split('T')[0]);
+
+        // Fetch medications
+        const medsPromise = supabase.from('medications').select('id, drug_name, dose, frequency');
+
+        // Fetch recent daily summaries for health score
+        const summaryPromise = supabase.from('daily_summary').select('date, health_score, avg_rhr, avg_hrv')
+            .order('date', { ascending: false }).limit(7);
+
+        // Execute all in parallel
+        const [vitalsResults, bodyResult, labResult, adherenceResult, medsResult, summaryResult] = await Promise.all([
+            Promise.all(vitalsPromises),
+            bodyPromise,
+            labPromise,
+            adherencePromise,
+            medsPromise,
+            summaryPromise
+        ]);
+
+        // Parse vitals
+        const latestVitals = {};
+        vitalsResults.forEach(r => {
+            if (r.data && r.data.length > 0) {
+                const v = r.data[0];
+                latestVitals[v.metric_type] = { value: v.value, unit: v.unit, date: v.recorded_at?.split('T')[0] };
+            }
+        });
+
+        // Parse weight
+        const weight = bodyResult.data?.[0];
+
+        // Parse labs
+        const labs = labResult.data || [];
+        const labLines = labs.map(l =>
+            `${l.metric_type}: ${l.value} ${l.unit} (${l.test_date})`
+        ).join('\n');
+
+        // Calculate adherence rate
+        const meds = medsResult.data || [];
+        const adherenceLogs = adherenceResult.data || [];
+        const totalLogs = adherenceLogs.length;
+        const takenLogs = adherenceLogs.filter(l => l.taken).length;
+        const adherenceRate = totalLogs > 0 ? Math.round((takenLogs / totalLogs) * 100) : null;
+
+        // Parse health scores
+        const summaries = summaryResult.data || [];
+        const avgHealthScore = summaries.length > 0
+            ? Math.round(summaries.reduce((sum, s) => sum + (s.health_score || 0), 0) / summaries.filter(s => s.health_score).length)
+            : null;
+
+        // Build context string
+        let context = `\n[PATIENT CONTEXT — live data snapshot, do NOT repeat verbatim to patient]\n`;
+        context += `Generated: ${now.toISOString().split('T')[0]}\n\n`;
+
+        context += `LATEST VITALS:\n`;
+        if (latestVitals.resting_heart_rate) context += `  Resting HR: ${latestVitals.resting_heart_rate.value} bpm (${latestVitals.resting_heart_rate.date})\n`;
+        if (latestVitals.hrv) context += `  HRV (SDNN): ${latestVitals.hrv.value} ms (${latestVitals.hrv.date})\n`;
+        if (latestVitals.blood_oxygen) context += `  SpO2: ${latestVitals.blood_oxygen.value}% (${latestVitals.blood_oxygen.date})\n`;
+        if (latestVitals.steps) context += `  Steps (latest): ${latestVitals.steps.value} (${latestVitals.steps.date})\n`;
+        if (latestVitals.blood_pressure_systolic && latestVitals.blood_pressure_diastolic) {
+            context += `  BP: ${latestVitals.blood_pressure_systolic.value}/${latestVitals.blood_pressure_diastolic.value} mmHg (${latestVitals.blood_pressure_systolic.date})\n`;
+            context += `  ⚠️ NOTE: Only limited BP readings on file — critical gap for post-MI patient\n`;
+        } else {
+            context += `  BP: No readings on file — CRITICAL GAP\n`;
+        }
+        if (weight) context += `  Weight: ${weight.value} ${weight.unit} (${weight.recorded_at?.split('T')[0]})\n`;
+
+        context += `\nLATEST LAB RESULTS:\n${labLines || '  No lab results on file'}\n`;
+
+        context += `\nMEDICATIONS:\n`;
+        meds.forEach(m => { context += `  ${m.drug_name} ${m.dose} — ${m.frequency}\n`; });
+        if (adherenceRate !== null) context += `  30-day adherence rate: ${adherenceRate}%\n`;
+
+        if (avgHealthScore !== null) {
+            context += `\nHEALTH SCORE: ${avgHealthScore}/100 (7-day avg)\n`;
+        }
+
+        context += `\nKNOWN DATA GAPS: BP (very few readings), HRV (may have stopped updating Jan 2026), Weight (may have stopped Feb 2025)\n`;
+
+        return context;
+    } catch (error) {
+        console.error('buildPatientContext error:', error);
+        return '\n[PATIENT CONTEXT: Failed to load — proceed with static knowledge only]\n';
+    }
+}
+
+/**
+ * Generate a proactive daily health briefing on app load.
+ */
+export async function generateDailyBriefing(supabase) {
+    if (!genAI || !supabase) return null;
+
+    try {
+        const context = await buildPatientContext(supabase);
+
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.5-flash",
+            systemInstruction: `You are Dr. Kuzbury, Shahbaz's personal AI cardiologist. Generate a brief daily health briefing (3-5 sentences max).
+
+Based on the live patient data provided, highlight:
+1. Medication adherence status (praise or nudge)
+2. Any vital signs that are out of target range or trending in a concerning direction
+3. Any overdue tests or data gaps the patient should address
+4. One actionable recommendation for today
+
+Tone: Warm, concise, clinically precise. Address him as "Shahbaz".
+Do NOT list every metric — only call out what matters today.
+Do NOT repeat raw numbers verbatim from the context — summarize meaningfully.
+If data is limited, say so briefly and suggest what to track.`
+        });
+
+        const result = await model.generateContent(
+            `Generate today's daily health briefing for Shahbaz.\n${context}`
+        );
+
+        return result.response.text();
+    } catch (error) {
+        console.error('Daily briefing generation error:', error);
+        return null;
+    }
+}
+
+// Full clinical system prompt for Dr. Kuzbury
+const KUZBURY_SYSTEM_PROMPT = `You are Dr. Kuzbury, a senior AI Cardiologist serving as Shahbaz's personal cardiovascular health advisor.
+
+═══ PATIENT PROFILE ═══
+Name: Shahbaz | Age: 45 years | Sex: Male | DOB: 15 May 1980
+
+═══ DIAGNOSES ═══
+• Atherosclerotic Heart Disease (ASHD) of native coronary artery
+• Chronic Ischaemic Heart Disease (IHD)
+• Old Myocardial Infarction (OMI) — prior MI survivor
+• Hyperlipidaemia
+
+═══ CURRENT MEDICATIONS ═══
+1. Rosuvastatin 40 mg daily (high-intensity statin — LDL target)
+2. Bisoprolol 2.5 mg daily (beta-blocker — HR/BP control, cardioprotection)
+3. Aspirin 75 mg daily (antiplatelet — secondary prevention)
+
+═══ CLINICAL TARGETS (ESC 2024 + AHA 2025 Secondary Prevention) ═══
+• LDL-C: <55 mg/dL (very high risk category)
+• Blood Pressure: <130/80 mmHg
+• Resting Heart Rate: 55-65 bpm (beta-blocker optimised)
+• HbA1c: <5.7% (non-diabetic range — monitor metabolic risk)
+• ApoB: <65 mg/dL (if available)
+• Lp(a): Awareness only — no approved therapy to lower yet
+• Medication Adherence: ≥95% target
+
+═══ DRUG-SPECIFIC MONITORING ═══
+Rosuvastatin 40mg:
+  - Watch for: myalgia/muscle pain (CK if symptomatic), elevated ALT/AST
+  - Avoid: grapefruit in excess, combination with gemfibrozil
+  - Renal dose adjustment if eGFR drops
+Bisoprolol 2.5mg:
+  - Watch for: fatigue, cold extremities, exercise intolerance, bradycardia <50 bpm
+  - Do NOT stop abruptly — taper required (rebound tachycardia risk)
+  - May mask hypoglycaemia symptoms
+Aspirin 75mg:
+  - Watch for: GI bleeding (dark stools, epigastric pain), bruising
+  - Avoid: NSAIDs (ibuprofen competes for COX-1, reduces antiplatelet effect)
+  - PPI co-prescription if GI risk factors present
+
+═══ RED FLAG MATRIX — IMMEDIATE ACTION ═══
+🚨 CALL 112 (KSA) or 999 (UK) IMMEDIATELY if ANY of these:
+  - Chest pain at rest, or chest pain severity ≥7/10
+  - New-onset chest pain (different character from usual)
+  - Chest pain with diaphoresis (sweating), nausea, or jaw/arm radiation
+  - Syncope or near-syncope
+  - BP >180/110 mmHg (hypertensive emergency)
+  - HR <40 bpm with dizziness/lightheadedness
+  - Sudden severe breathlessness at rest
+
+⚠️ URGENT — Contact cardiologist within 24 hours:
+  - Chest pain 4-6/10 with exertion, relieved by rest
+  - BP consistently >150/95 on multiple readings
+  - New palpitations lasting >30 minutes
+  - Ankle swelling increasing over days
+  - Unexplained weight gain >2 kg in 1 week (fluid retention)
+
+═══ LIFESTYLE GUIDANCE (Post-MI Secondary Prevention) ═══
+Exercise: 150 min/week moderate aerobic (brisk walking, cycling) OR 75 min vigorous
+  - Always warm up 5-10 min, avoid heavy isometric strain
+  - Stop if chest pain, excessive breathlessness, or dizziness
+  - Target: able to talk during exercise (talk test)
+Diet: Mediterranean-pattern — olive oil, fish 2x/week, vegetables, whole grains
+  - Limit: saturated fat <7% calories, sodium <2g/day, refined sugar
+  - Omega-3: consider if triglycerides elevated
+Stress/Mental Health: Post-MI depression affects ~20% of survivors
+  - Screen for: persistent low mood, loss of interest, sleep disruption
+  - Cardiac rehabilitation programmes have strong evidence for both physical + psychological recovery
+Sleep: 7-8 hours, screen for sleep apnoea if snoring/daytime somnolence (raises CV risk)
+Alcohol: ≤14 units/week, no binge episodes
+Smoking: Absolute cessation (if applicable)
+
+═══ COMMUNICATION STYLE ═══
+• Warm, professional, peer-level — speak as a senior cardiologist to an intelligent, engaged patient
+• Clinically authoritative but never alarmist
+• Concise: 1-3 short paragraphs max per response
+• Reference specific numbers from the patient context when relevant
+• Always caveat that medication changes or new treatments require his human cardiologist's approval
+• If asked about something outside cardiology, briefly answer if simple, otherwise suggest the appropriate specialist
+• When patient data shows gaps (missing BP, stale HRV), gently flag it as actionable
+• Celebrate wins — good adherence, improving trends, consistent exercise`;
+
+/**
+ * Chat with Dr. Kuzbury persona.
+ * Now accepts patientContext string to inject live data awareness.
+ */
+export async function chatWithKuzbury(message, history = [], patientContext = '') {
     if (!genAI) {
         console.warn("Gemini API Key missing. Returning mock Kuzbury response.");
         return "I am operating in offline mode right now, Shahbaz. I have saved your log to my episodic memory. We can review it in detail once connectivity is restored.";
     }
 
     try {
+        const fullSystemPrompt = patientContext
+            ? `${KUZBURY_SYSTEM_PROMPT}\n\n${patientContext}`
+            : KUZBURY_SYSTEM_PROMPT;
+
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            systemInstruction: `You are Dr. Kuzbury, a personal AI Cardiologist.
-Your patient is Shahbaz (45y). He has ASHD of native coronary artery, chronic IHD, old myocardial infarction (OMI), and hyperlipidaemia.
-Targets: LDL-C <55 mg/dL, BP <130/80 mmHg, resting HR 55-65 bpm.
-Tone: Warm, professional, clinically authoritative, never alarmist. Speak as a senior cardiologist to an intelligent patient.
-Provide advice, interpret his metrics/symptoms, and politely add caveats that formal clinical changes require his human cardiologist's approval.
-If he mentions chest pain >7/10 or BP >180/110, immediately advise calling emergency services (112 in KSA / 999 in UK).
-Keep responses concise, peer-level, and conversational (1-3 small paragraphs max).`
+            systemInstruction: fullSystemPrompt
         });
 
         // Format history for Gemini chat strictly adhering to its rules.

@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, WifiOff, Loader, Send } from 'lucide-react';
-import { extractVoiceLog, chatWithKuzbury } from '../lib/gemini';
+import { extractVoiceLog, chatWithKuzbury, buildPatientContext } from '../lib/gemini';
 import './KuzburyChat.css';
 
-export default function KuzburyChat() {
+export default function KuzburyChat({ supabase }) {
     const [isRecording, setIsRecording] = useState(false);
     const [transcription, setTranscription] = useState('');
     const [status, setStatus] = useState('idle'); // idle, recording, processing, success, offline-queued
     const [isOffline, setIsOffline] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
+    const [patientContext, setPatientContext] = useState('');
 
     const [chatHistory, setChatHistory] = useState([
-        { role: 'model', text: "Good morning Shahbaz. I have fully reviewed the entirety of your historical medical data, your diagnoses of ASHD and OMI, and your most recent vitals up to today. How can I assist your cardiovascular management right now?" }
+        { role: 'model', text: "Good morning Shahbaz. I'm Dr. Kuzbury, your AI cardiologist. I'm loading your latest health data now — feel free to ask me anything about your cardiovascular health." }
     ]);
 
     const recognitionRef = useRef(null);
@@ -56,6 +57,16 @@ export default function KuzburyChat() {
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, []);
+
+    // Load patient context from Supabase on mount
+    useEffect(() => {
+        if (supabase) {
+            buildPatientContext(supabase).then(ctx => {
+                setPatientContext(ctx);
+                console.log('Patient context loaded for Dr. Kuzbury');
+            }).catch(e => console.error('Failed to load patient context:', e));
+        }
+    }, [supabase]);
 
     // Auto-scroll chat to bottom
     useEffect(() => {
@@ -121,8 +132,8 @@ export default function KuzburyChat() {
                 if (data) console.log("Extracted Health Event:", data);
             }).catch(e => console.error("Silent extraction failed:", e));
 
-            // Execute Gemini Chat Inference
-            const responseText = await chatWithKuzbury(userMessage, chatHistory);
+            // Execute Gemini Chat Inference with live patient context
+            const responseText = await chatWithKuzbury(userMessage, chatHistory, patientContext);
 
             // Render Model Response
             setChatHistory(prev => [...prev, { role: 'model', text: responseText }]);
