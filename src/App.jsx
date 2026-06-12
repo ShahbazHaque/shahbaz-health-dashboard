@@ -6,6 +6,7 @@ import GlidePathChart from './components/GlidePathChart';
 import ClinicianReport from './components/ClinicianReport';
 import DataCapture from './components/DataCapture';
 import BPLogger from './components/BPLogger';
+import LabEntryForm from './components/LabEntryForm';
 import { generateDailyBriefing } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
@@ -519,6 +520,9 @@ export default function App() {
   // BP Logger modal state
   const [showBPLogger, setShowBPLogger] = useState(false);
 
+  // Lab Entry modal state
+  const [showLabEntry, setShowLabEntry] = useState(false);
+
   // Build clinicalData from real lab_results table
   const clinicalData = useMemo(() => {
     if (!labResults || labResults.length === 0) return [];
@@ -804,9 +808,12 @@ export default function App() {
 
         {/* ===== CLINICAL TAB ===== */}
         {activeTab === 'clinical' && (<>
-          <div className="section-header">
-            <div className="section-icon" style={{ background: 'var(--accent-red-glow)', color: '#ef4444' }}>🩸</div>
-            <span className="section-title">Clinical Biomarkers & Targets</span>
+          <div className="section-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="section-icon" style={{ background: 'var(--accent-red-glow)', color: '#ef4444' }}>🩸</div>
+              <span className="section-title">Clinical Biomarkers & Targets</span>
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowLabEntry(true)}>+ Add Lab Result</button>
           </div>
           <div style={{ marginBottom: '24px', opacity: 0.8, fontSize: '14px' }}>
             Tracking secondary prevention longevity pathways based on 2025 AHA/ACC Chronic Coronary Disease guidelines.
@@ -839,7 +846,7 @@ export default function App() {
             <div className="card fade-in" style={{ padding: '40px', textAlign: 'center', marginBottom: '24px' }}>
               <div style={{ fontSize: '40px', marginBottom: '12px' }}>🩸</div>
               <h3 style={{ marginBottom: '8px' }}>No Lab Results Yet</h3>
-              <p style={{ color: 'var(--text-secondary)' }}>Lab results will appear here once they are added to the database.</p>
+              <p style={{ color: 'var(--text-secondary)' }}>Click "+ Add Lab Result" above to enter your first blood test, or scan a lab report in the Add Data tab.</p>
             </div>
           )}
 
@@ -919,6 +926,14 @@ export default function App() {
       )}
 
       {/* BP Logger Modal */}
+      {showLabEntry && (
+        <LabEntryForm
+          supabase={supabase}
+          onClose={() => setShowLabEntry(false)}
+          onSaved={loadData}
+        />
+      )}
+
       {showBPLogger && (
         <BPLogger
           supabase={supabase}
