@@ -60,7 +60,7 @@ npm run dev        # Starts Vite dev server
 
 ### Environment Variables (`.env.local` — NOT committed to git)
 ```
-VITE_GEMINI_API_KEY=AIzaSyBZH1oHDUdndaz_E1QdRqHWM0JmkCs6xeA
+VITE_GEMINI_API_KEY=[REDACTED — replace with your Gemini API key]
 VITE_ELEVENLABS_AGENT_ID=agent_01jwk33b9tek7br97s5an2sagn
 ```
 
@@ -381,7 +381,7 @@ cd ~/Desktop/Antigravity/shahbaz-health-dashboard
 ```bash
 cat .env.local
 # Should show:
-# VITE_GEMINI_API_KEY=AIzaSyBZH1oHDUdndaz_E1QdRqHWM0JmkCs6xeA
+# VITE_GEMINI_API_KEY=[REDACTED — replace with your Gemini API key]
 # VITE_ELEVENLABS_AGENT_ID=agent_01jwk33b9tek7br97s5an2sagn
 ```
 

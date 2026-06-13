@@ -374,6 +374,140 @@ If data is limited, say so briefly and suggest what to track.`
     }
 }
 
+// ============================================================
+// SPRINT 3.1 — AI-GENERATED TREND INSIGHTS
+// ============================================================
+
+/**
+ * Generate AI-powered clinical insights from 90-day trend data.
+ * Replaces the old rule-based generateInsights() in App.jsx.
+ * Saves results to health_insights table and returns the array.
+ */
+export async function generateAIInsights(supabase) {
+    if (!genAI || !supabase) return [];
+
+    try {
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+
+        // Fetch 90-day daily summaries
+        const { data: summaries } = await supabase
+            .from('daily_summary')
+            .select('date, avg_rhr, avg_hrv, blood_oxygen_avg, step_count, weight_kg, health_score, active_calories')
+            .gte('date', ninetyDaysAgo)
+            .order('date', { ascending: true });
+
+        // Fetch all lab results (for trend context)
+        const { data: labs } = await supabase
+            .from('lab_results')
+            .select('test_date, metric_type, value, unit')
+            .order('test_date', { ascending: false })
+            .limit(30);
+
+        // Fetch 30-day medication adherence
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const { data: adherenceLogs } = await supabase
+            .from('medication_log')
+            .select('taken, log_date')
+            .gte('log_date', thirtyDaysAgo);
+
+        if (!summaries || summaries.length < 7) return [];
+
+        // Summarise the data for the prompt (avoid sending raw 90 rows)
+        const recent7 = summaries.slice(-7);
+        const prior30 = summaries.slice(-37, -7);
+        const all90 = summaries;
+
+        const avg = (arr, key) => {
+            const vals = arr.filter(s => s[key] != null).map(s => s[key]);
+            return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : 'N/A';
+        };
+
+        const adherenceRate = adherenceLogs && adherenceLogs.length > 0
+            ? Math.round((adherenceLogs.filter(l => l.taken).length / adherenceLogs.length) * 100)
+            : null;
+
+        const summaryPayload = {
+            period: `${ninetyDaysAgo} to ${today}`,
+            data_points: summaries.length,
+            last_7_days: {
+                avg_rhr: avg(recent7, 'avg_rhr'),
+                avg_hrv: avg(recent7, 'avg_hrv'),
+                avg_spo2: avg(recent7, 'blood_oxygen_avg'),
+                avg_steps: avg(recent7, 'step_count'),
+                avg_weight_kg: avg(recent7, 'weight_kg'),
+                avg_health_score: avg(recent7, 'health_score'),
+            },
+            prior_30_days: {
+                avg_rhr: avg(prior30, 'avg_rhr'),
+                avg_hrv: avg(prior30, 'avg_hrv'),
+                avg_spo2: avg(prior30, 'blood_oxygen_avg'),
+                avg_steps: avg(prior30, 'step_count'),
+                avg_weight_kg: avg(prior30, 'weight_kg'),
+            },
+            lab_results: labs || [],
+            medication_adherence_30d: adherenceRate !== null ? `${adherenceRate}%` : 'No data',
+        };
+
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash',
+            generationConfig: {
+                responseMimeType: 'application/json',
+            },
+            systemInstruction: `You are a clinical cardiology AI analysing health trend data for Shahbaz, 45y male with ASHD, Chronic IHD, Old MI, and Hyperlipidaemia.
+On: Rosuvastatin 40mg, Bisoprolol 2.5mg, Aspirin 75mg.
+Clinical targets: LDL-C <55 mg/dL, BP <130/80, RHR 55-65 bpm, HbA1c <5.7%.
+Guidelines: ESC 2024 + AHA 2025 Secondary Prevention.
+
+Analyse the 90-day trend data provided and generate a list of 3-6 clinically meaningful insights.
+Focus on: concerning trends, improvements, overdue tests, data gaps, goal attainment.
+Do NOT generate trivial or obvious insights. Each must be actionable or clinically relevant.
+
+Return a JSON array with this exact schema:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "category": "vitals|labs|body|medications|lifestyle",
+    "severity": "info|warning|alert",
+    "title": "Short insight title (max 8 words)",
+    "description": "2-3 sentence clinical explanation with context and recommendation.",
+    "metric_type": "e.g. resting_heart_rate|ldl_cholesterol|hrv|weight|steps|adherence|null"
+  }
+]
+
+severity guide: info = positive or neutral, warning = needs attention, alert = clinically urgent`
+        });
+
+        const result = await model.generateContent(
+            `Analyse this 90-day health trend data and generate insights:\n\n${JSON.stringify(summaryPayload, null, 2)}`
+        );
+
+        let insights = JSON.parse(result.response.text());
+        if (!Array.isArray(insights)) return [];
+
+        // Validate and clean each insight
+        insights = insights.map(ins => ({
+            date: ins.date || today,
+            category: ins.category || 'vitals',
+            severity: ['info', 'warning', 'alert'].includes(ins.severity) ? ins.severity : 'info',
+            title: ins.title || 'Health Insight',
+            description: ins.description || '',
+            metric_type: ins.metric_type || null,
+        })).filter(ins => ins.title && ins.description);
+
+        // Clear old AI-generated insights and save new ones
+        if (insights.length > 0) {
+            await supabase.from('health_insights').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+            await supabase.from('health_insights').insert(insights);
+        }
+
+        return insights;
+    } catch (error) {
+        console.error('generateAIInsights error:', error);
+        return [];
+    }
+}
+
 // Full clinical system prompt for Dr. Kuzbury
 const KUZBURY_SYSTEM_PROMPT = `You are Dr. Kuzbury, a senior AI Cardiologist serving as Shahbaz's personal cardiovascular health advisor.
 

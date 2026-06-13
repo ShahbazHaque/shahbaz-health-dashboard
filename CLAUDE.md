@@ -254,10 +254,20 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 2. Start dev server (Node API method in Quick Resume above)
 3. Check current sprint status below and continue
 
-## Current Status (2026-04-28)
+## Current Status (2026-06-12)
+- **Deployment:** Vercel at https://shahbaz-heart-health.vercel.app (GitHub Pages retired)
 - **Data Capture (Add Data tab):** COMPLETE — all 5 data entry methods working
-- **Sprint 1 — AI Intelligence:** COMPLETE
-  - S1.1: Enhanced System Prompt ✅ — full clinical prompt with patient profile, meds, targets, red flags, lifestyle guidance
-  - S1.2: Context Injection ✅ — `buildPatientContext(supabase)` queries live data, passed to every chat call
-  - S1.3: Daily Briefing ✅ — `generateDailyBriefing(supabase)` runs on app load, displays on Overview tab
-- **Next up:** Sprint 2 — Data Tracking (BP Logger, Lab Entry Form, Symptom Diary)
+- **Sprint 1 — AI Intelligence:** COMPLETE (S1.1 + S1.2 + S1.3)
+- **Sprint 2 — Data Tracking:** COMPLETE (S2.1 BP Logger ✅, S2.2 Lab Entry Form ✅, S2.3 skipped per user)
+- **Sprint 3.1 — AI-Generated Trend Insights:** COMPLETE ✅
+  - `generateAIInsights(supabase)` in gemini.js — Gemini analyses 90-day trend data + labs
+  - Replaces rule-based insights; saves to health_insights table; refreshes every 24h
+  - Insights tab has Refresh button and improved severity-coloured cards
+- **Sprint 4.1 — Exercise Session Logger:** COMPLETE ✅
+  - `exercise_log` Supabase table created
+  - `ExerciseLogger.jsx` — full form: type, duration, intensity, HR, distance, calories, symptoms, notes
+  - 🏃 FAB on Vitals tab (purple, above BP FAB)
+- **⚠️ BLOCKED: Gemini API key is flagged/blocked by Google**
+  - Old key was committed to public repo in COWORK_MIGRATION.md and HANDOVER.md (now redacted)
+  - User must generate new key at https://aistudio.google.com and update Vercel env var VITE_GEMINI_API_KEY
+- **Next up:** Sprint 4.2 (Apple Health re-sync with --since flag) or Sprint 5.1 (Meal Photo Logging)

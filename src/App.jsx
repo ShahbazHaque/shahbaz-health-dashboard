@@ -7,7 +7,8 @@ import ClinicianReport from './components/ClinicianReport';
 import DataCapture from './components/DataCapture';
 import BPLogger from './components/BPLogger';
 import LabEntryForm from './components/LabEntryForm';
-import { generateDailyBriefing } from './lib/gemini';
+import ExerciseLogger from './components/ExerciseLogger';
+import { generateDailyBriefing, generateAIInsights } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
@@ -465,10 +466,15 @@ export default function App() {
       const { data: insData } = await supabase.from('health_insights').select('*').order('created_at', { ascending: false }).limit(10);
       setInsights(insData || []);
 
-      // Generate new insights if we have summaries
-      if (sumData && sumData.length > 7 && (!insData || insData.length === 0)) {
-        const newInsights = await generateInsights(sumData);
-        setInsights(newInsights);
+      // Generate new AI insights if none stored (or force refresh on each load)
+      if (sumData && sumData.length > 7) {
+        // Only regenerate if no recent insights (avoid burning Gemini quota on every page load)
+        const needsRefresh = !insData || insData.length === 0 ||
+          (insData[0]?.created_at && new Date() - new Date(insData[0].created_at) > 24 * 60 * 60 * 1000);
+        if (needsRefresh) {
+          const newInsights = await generateAIInsights(supabase);
+          if (newInsights.length > 0) setInsights(newInsights);
+        }
       }
     } catch (err) {
       console.error('Load error:', err);
@@ -522,6 +528,9 @@ export default function App() {
 
   // Lab Entry modal state
   const [showLabEntry, setShowLabEntry] = useState(false);
+
+  // Exercise Logger modal state
+  const [showExerciseLogger, setShowExerciseLogger] = useState(false);
 
   // Build clinicalData from real lab_results table
   const clinicalData = useMemo(() => {
@@ -864,27 +873,62 @@ export default function App() {
 
         {/* ===== INSIGHTS TAB ===== */}
         {activeTab === 'insights' && (<>
-          <div className="section-header">
-            <div className="section-icon" style={{ background: 'var(--accent-purple-glow)', color: 'var(--accent-purple)' }}>💡</div>
-            <span className="section-title">Health Insights</span>
+          <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="section-icon" style={{ background: 'var(--accent-purple-glow)', color: 'var(--accent-purple)' }}>💡</div>
+              <span className="section-title">AI Health Insights</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: '10px', background: 'rgba(0,204,136,0.1)', border: '1px solid rgba(0,204,136,0.2)' }}>
+                Powered by Gemini
+              </span>
+            </div>
+            <button
+              onClick={async () => {
+                setInsights([]);
+                const fresh = await generateAIInsights(supabase);
+                if (fresh.length > 0) setInsights(fresh);
+              }}
+              style={{
+                padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border)',
+                background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer',
+                fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              ↻ Refresh
+            </button>
           </div>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '20px' }}>
+            Dr. Kuzbury analyses your 90-day trends and lab history to surface clinically meaningful patterns. Refreshed every 24 hours.
+          </p>
           {insights.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px' }}>
               <div className="icon">💡</div>
-              <h3>No Insights Yet</h3>
-              <p>Import more data or wait for enough daily summaries to generate meaningful insights.</p>
+              <h3>Generating insights…</h3>
+              <p>Analysing 90-day trend data. This takes a few seconds.</p>
             </div>
           ) : (
-            insights.map((insight, i) => (
-              <div key={i} className="insight-item fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-                <div className={`insight-dot ${insight.severity}`} />
-                <div>
-                  <div className="insight-title">{insight.title}</div>
+            insights.map((insight, i) => {
+              const severityColors = { alert: '#ff4444', warning: '#ffaa00', info: '#00cc88' };
+              const severityIcons = { alert: '🚨', warning: '⚠️', info: '✅' };
+              const color = severityColors[insight.severity] || '#00cc88';
+              return (
+                <div key={i} className="insight-item fade-in" style={{
+                  animationDelay: `${i * 0.05}s`,
+                  borderLeft: `3px solid ${color}`,
+                  paddingLeft: '16px',
+                  marginBottom: '16px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span>{severityIcons[insight.severity] || '💡'}</span>
+                    <div className="insight-title" style={{ color }}>{insight.title}</div>
+                  </div>
                   <div className="insight-desc">{insight.description}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>{insight.date} • {insight.category}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                    {insight.date} · {insight.category}
+                    {insight.metric_type && ` · ${insight.metric_type.replace(/_/g, ' ')}`}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </>)}
         {/* ===== ADD DATA TAB ===== */}
@@ -904,6 +948,26 @@ export default function App() {
           />
         )}
       </>)}
+
+      {/* Exercise Logger FAB — visible on Vitals tab */}
+      {activeTab === 'vitals' && (
+        <button
+          onClick={() => setShowExerciseLogger(true)}
+          title="Log Exercise Session"
+          style={{
+            position: 'fixed', bottom: '96px', right: '28px', zIndex: 900,
+            width: '56px', height: '56px', borderRadius: '50%', border: 'none',
+            background: '#6c63ff', color: '#fff', cursor: 'pointer',
+            fontSize: '22px', fontWeight: '700', boxShadow: '0 4px 20px rgba(108,99,255,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'transform 0.2s'
+          }}
+          onMouseEnter={e => e.target.style.transform = 'scale(1.1)'}
+          onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+        >
+          🏃
+        </button>
+      )}
 
       {/* BP Logger FAB — visible on Overview and Vitals tabs */}
       {(activeTab === 'overview' || activeTab === 'vitals') && (
@@ -938,6 +1002,14 @@ export default function App() {
         <BPLogger
           supabase={supabase}
           onClose={() => setShowBPLogger(false)}
+          onSaved={loadData}
+        />
+      )}
+
+      {showExerciseLogger && (
+        <ExerciseLogger
+          supabase={supabase}
+          onClose={() => setShowExerciseLogger(false)}
           onSaved={loadData}
         />
       )}
