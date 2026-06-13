@@ -601,7 +601,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
                             overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
                         }}>
 {`cd ~/Desktop/Antigravity/shahbaz-health-dashboard
-node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
+node import-data.mjs ~/Downloads/apple_health_export\\ 2/export.xml`}
                         </pre>
                         <div style={{ marginTop: '8px', color: 'var(--text-muted)', fontSize: '12px' }}>
                             For incremental re-sync (only new data):{' '}
@@ -632,7 +632,7 @@ node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
                             overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
                         }}>
 {`cd ~/Desktop/Antigravity/shahbaz-health-dashboard
-node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
+node import-data.mjs ~/Downloads/apple_health_export\\ 2/export.xml`}
                         </pre>
                         <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '0 0 6px' }}>
                             Or for incremental sync (only import data since a date — much faster):
@@ -642,7 +642,7 @@ node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
                             background: 'rgba(0,0,0,0.5)', color: '#00cc88', fontSize: '12px',
                             overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
                         }}>
-{`node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml --since 2026-01-01`}
+{`node import-data.mjs ~/Downloads/apple_health_export\\ 2/export.xml --since 2026-01-01`}
                         </pre>
                     </div>
                     <button className="btn btn-secondary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setAhStatus('idle')}>← Back</button>

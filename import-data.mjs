@@ -92,10 +92,14 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function uploadBatch(tableName, batch) {
     for (let attempt = 1; attempt <= 5; attempt++) {
         try {
-            const { error } = await supabase.from(tableName).insert(batch);
+            // upsert avoids duplicate-key errors on re-runs; conflict on (recorded_at, metric_type)
+            const { error } = await supabase.from(tableName).upsert(batch, {
+                onConflict: 'recorded_at,metric_type',
+                ignoreDuplicates: true,
+            });
             if (!error) {
-                // Small delay after every successful batch — avoids rate limit 520s
-                await sleep(150);
+                // 800ms pause between batches — free tier PostgREST rate limit
+                await sleep(800);
                 return;
             }
             const msg = error.message || String(error);
@@ -132,7 +136,7 @@ async function importData() {
 
     let vitalsBatch = [];
     let bodyBatch = [];
-    const BATCH_SIZE = 500; // Free tier rate limit — keep small, sleep between batches
+    const BATCH_SIZE = 100; // Free tier: keep small and slow to avoid Cloudflare 520s
     let totalProcessed = 0;
     let totalUploaded = 0;
     let totalSkipped = 0;
