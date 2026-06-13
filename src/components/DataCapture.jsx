@@ -251,6 +251,15 @@ export default function DataCapture({ supabase, onDataAdded }) {
     // ─── Apple Health upload ───
     const handleAppleHealthFile = async (file) => {
         if (!file) return;
+
+        // Files > 150 MB will crash the browser tab — route to CLI
+        const MB = file.size / (1024 * 1024);
+        if (MB > 150) {
+            setAhStatus('too_large');
+            setAhStats({ fileMB: Math.round(MB), fileName: file.name });
+            return;
+        }
+
         try {
             setAhStatus('parsing');
             setAhProgress(5);
@@ -577,14 +586,75 @@ export default function DataCapture({ supabase, onDataAdded }) {
     // ─── Apple Health upload UI ───
     const renderAppleHealth = () => {
         if (ahStatus === 'idle') {
-            return renderDropzone('.zip,.xml', 'Apple Health export (.zip or .xml) — max 500MB');
+            return (
+                <>
+                    {renderDropzone('.zip,.xml', 'Apple Health export (.zip or .xml) — files under 150 MB only')}
+                    <div style={{
+                        marginTop: '16px', padding: '14px 16px', borderRadius: '10px',
+                        background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.3)',
+                        fontSize: '13px', color: 'var(--text-secondary)'
+                    }}>
+                        <strong style={{ color: '#a78bfa' }}>💡 Full export too large?</strong> Apple Health exports are usually 1–3 GB. Use the terminal script instead:
+                        <pre style={{
+                            marginTop: '10px', padding: '10px 12px', borderRadius: '8px',
+                            background: 'rgba(0,0,0,0.4)', color: '#00cc88', fontSize: '12px',
+                            overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
+                        }}>
+{`cd ~/Desktop/Antigravity/shahbaz-health-dashboard
+node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
+                        </pre>
+                        <div style={{ marginTop: '8px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                            For incremental re-sync (only new data):{' '}
+                            <code style={{ color: '#00cc88' }}>--since 2026-01-01</code>
+                        </div>
+                    </div>
+                </>
+            );
+        }
+        if (ahStatus === 'too_large') {
+            return (
+                <div style={{ padding: '8px 0' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                        <div style={{ fontSize: '36px', marginBottom: '8px' }}>📦</div>
+                        <h4 style={{ color: 'var(--text-primary)', margin: '0 0 6px' }}>File too large for browser</h4>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>
+                            <strong>{ahStats?.fileName}</strong> is {ahStats?.fileMB} MB. Apple Health exports must be imported via the terminal script.
+                        </p>
+                    </div>
+                    <div style={{
+                        padding: '14px 16px', borderRadius: '10px',
+                        background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border)',
+                    }}>
+                        <p style={{ color: '#a78bfa', fontWeight: '600', fontSize: '13px', margin: '0 0 10px' }}>Run this in Terminal:</p>
+                        <pre style={{
+                            margin: '0 0 12px', padding: '10px 12px', borderRadius: '8px',
+                            background: 'rgba(0,0,0,0.5)', color: '#00cc88', fontSize: '12px',
+                            overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
+                        }}>
+{`cd ~/Desktop/Antigravity/shahbaz-health-dashboard
+node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml`}
+                        </pre>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '0 0 6px' }}>
+                            Or for incremental sync (only import data since a date — much faster):
+                        </p>
+                        <pre style={{
+                            margin: 0, padding: '10px 12px', borderRadius: '8px',
+                            background: 'rgba(0,0,0,0.5)', color: '#00cc88', fontSize: '12px',
+                            overflowX: 'auto', whiteSpace: 'pre-wrap', userSelect: 'all', cursor: 'text'
+                        }}>
+{`node import-data.mjs ~/Desktop/apple_health_export\\ 2/export.xml --since 2026-01-01`}
+                        </pre>
+                    </div>
+                    <button className="btn btn-secondary" style={{ marginTop: '16px', width: '100%' }} onClick={() => setAhStatus('idle')}>← Back</button>
+                </div>
+            );
         }
         if (ahStatus === 'error') {
             return (
                 <div className="state-message">
                     <div className="state-icon">⚠️</div>
                     <h4>Upload failed</h4>
-                    <p>Could not process the file. Make sure it's a valid Apple Health export.</p>
+                    <p>Could not process the file. Make sure it's a valid Apple Health export under 150 MB, or use the terminal script for large exports.</p>
                     <button className="btn btn-secondary" style={{ marginTop: '16px' }} onClick={() => setAhStatus('idle')}>Try Again</button>
                 </div>
             );
