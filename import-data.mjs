@@ -130,9 +130,6 @@ async function importData() {
 
     // ── Fetch latest recorded_at per metric from DB so we never re-insert existing rows ──
     console.log('Fetching latest dates per metric from database...');
-    const { data: latestRows } = await supabase.rpc('get_latest_vitals_dates').catch(() => ({ data: null }));
-
-    // Fallback: raw query via select if RPC doesn't exist
     let metricCutoffs = {}; // { metric_type: ISO date string }
     try {
         // Use individual queries per metric (most compatible approach)
