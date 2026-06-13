@@ -87,13 +87,28 @@ if (!isZip && !isXml) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function uploadBatch(tableName, batch) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-        const { error } = await supabase.from(tableName).insert(batch);
-        if (!error) return;
-        console.error(`\n⚠️  Upload error (attempt ${attempt}/3) on ${tableName}: ${error.message}`);
-        await new Promise(r => setTimeout(r, 1000 * attempt));
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            const { error } = await supabase.from(tableName).insert(batch);
+            if (!error) {
+                // Small delay after every successful batch — avoids rate limit 520s
+                await sleep(150);
+                return;
+            }
+            const msg = error.message || String(error);
+            console.error(`\n⚠️  Upload error (attempt ${attempt}/5) on ${tableName}: ${msg.substring(0, 120)}`);
+        } catch (e) {
+            console.error(`\n⚠️  Upload exception (attempt ${attempt}/5) on ${tableName}: ${e.message}`);
+        }
+        // Exponential backoff: 2s, 4s, 8s, 16s
+        const wait = 2000 * Math.pow(2, attempt - 1);
+        console.error(`   Retrying in ${wait / 1000}s...`);
+        await sleep(wait);
     }
+    console.error(`\n❌ Gave up on batch of ${batch.length} rows for ${tableName} after 5 attempts.`);
 }
 
 // ─── Main import ─────────────────────────────────────────────────────────────
@@ -117,7 +132,7 @@ async function importData() {
 
     let vitalsBatch = [];
     let bodyBatch = [];
-    const BATCH_SIZE = 5000;
+    const BATCH_SIZE = 500; // Free tier rate limit — keep small, sleep between batches
     let totalProcessed = 0;
     let totalUploaded = 0;
     let totalSkipped = 0;
