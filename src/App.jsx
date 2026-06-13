@@ -411,6 +411,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState([]);
   const [insights, setInsights] = useState([]);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState(null);
   const [latestVitals, setLatestVitals] = useState({});
   const [latestBody, setLatestBody] = useState({});
   const [hasData, setHasData] = useState(false);
@@ -466,14 +468,27 @@ export default function App() {
       const { data: insData } = await supabase.from('health_insights').select('*').order('created_at', { ascending: false }).limit(10);
       setInsights(insData || []);
 
-      // Generate new AI insights if none stored (or force refresh on each load)
+      // Generate new AI insights if none stored (or stale >24h)
       if (sumData && sumData.length > 7) {
-        // Only regenerate if no recent insights (avoid burning Gemini quota on every page load)
         const needsRefresh = !insData || insData.length === 0 ||
           (insData[0]?.created_at && new Date() - new Date(insData[0].created_at) > 24 * 60 * 60 * 1000);
         if (needsRefresh) {
-          const newInsights = await generateAIInsights(supabase);
-          if (newInsights.length > 0) setInsights(newInsights);
+          setInsightsLoading(true);
+          setInsightsError(null);
+          try {
+            const newInsights = await generateAIInsights(supabase);
+            if (newInsights.length > 0) setInsights(newInsights);
+            else if (!insData || insData.length === 0) {
+              setInsightsError('No insights returned. Your Gemini API key may be invalid — update VITE_GEMINI_API_KEY in Vercel.');
+            }
+          } catch (err) {
+            console.error('Auto insights error:', err);
+            if (!insData || insData.length === 0) {
+              setInsightsError('Gemini API key may be blocked. Go to https://aistudio.google.com to generate a new key.');
+            }
+          } finally {
+            setInsightsLoading(false);
+          }
         }
       }
     } catch (err) {
@@ -883,9 +898,26 @@ export default function App() {
             </div>
             <button
               onClick={async () => {
-                setInsights([]);
-                const fresh = await generateAIInsights(supabase);
-                if (fresh.length > 0) setInsights(fresh);
+                setInsightsLoading(true);
+                setInsightsError(null);
+                try {
+                  const fresh = await generateAIInsights(supabase);
+                  if (fresh.length > 0) {
+                    setInsights(fresh);
+                  } else {
+                    setInsightsError('No insights returned. Check that your Gemini API key is valid in Vercel → Settings → Environment Variables.');
+                  }
+                } catch (err) {
+                  console.error('Insights refresh error:', err);
+                  const msg = err?.message || '';
+                  if (msg.includes('403') || msg.includes('API_KEY') || msg.includes('key')) {
+                    setInsightsError('Gemini API key is blocked or invalid. Go to https://aistudio.google.com to generate a new key, then update VITE_GEMINI_API_KEY in Vercel.');
+                  } else {
+                    setInsightsError(`Failed to generate insights: ${msg || 'Unknown error'}`);
+                  }
+                } finally {
+                  setInsightsLoading(false);
+                }
               }}
               style={{
                 padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border)',
@@ -899,11 +931,25 @@ export default function App() {
           <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '20px' }}>
             Dr. Kuzbury analyses your 90-day trends and lab history to surface clinically meaningful patterns. Refreshed every 24 hours.
           </p>
-          {insights.length === 0 ? (
+          {insightsError ? (
+            <div style={{
+              background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)',
+              borderRadius: '12px', padding: '20px 24px', marginBottom: '20px'
+            }}>
+              <div style={{ color: '#ff6666', fontWeight: '600', marginBottom: '8px' }}>⚠️ Insights Unavailable</div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>{insightsError}</p>
+            </div>
+          ) : insightsLoading ? (
             <div className="empty-state" style={{ padding: '40px' }}>
               <div className="icon">💡</div>
               <h3>Generating insights…</h3>
               <p>Analysing 90-day trend data. This takes a few seconds.</p>
+            </div>
+          ) : insights.length === 0 ? (
+            <div className="empty-state" style={{ padding: '40px' }}>
+              <div className="icon">💡</div>
+              <h3>No insights yet</h3>
+              <p>Click Refresh to generate your first AI health analysis.</p>
             </div>
           ) : (
             insights.map((insight, i) => {
