@@ -92,11 +92,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function uploadBatch(tableName, batch) {
     for (let attempt = 1; attempt <= 5; attempt++) {
         try {
-            // upsert avoids duplicate-key errors on re-runs; conflict on (recorded_at, metric_type)
-            const { error } = await supabase.from(tableName).upsert(batch, {
-                onConflict: 'recorded_at,metric_type',
-                ignoreDuplicates: true,
-            });
+            const { error } = await supabase.from(tableName).insert(batch);
             if (!error) {
                 // 800ms pause between batches — free tier PostgREST rate limit
                 await sleep(800);
@@ -132,11 +128,62 @@ async function importData() {
         process.exit(1);
     }
 
+    // ── Fetch latest recorded_at per metric from DB so we never re-insert existing rows ──
+    console.log('Fetching latest dates per metric from database...');
+    const { data: latestRows } = await supabase.rpc('get_latest_vitals_dates').catch(() => ({ data: null }));
+
+    // Fallback: raw query via select if RPC doesn't exist
+    let metricCutoffs = {}; // { metric_type: ISO date string }
+    try {
+        // Use individual queries per metric (most compatible approach)
+        const metricTypes = Object.values(METRIC_MAP)
+            .filter(m => m.table === 'vitals')
+            .map(m => m.type);
+        const cutoffQueries = await Promise.all(
+            metricTypes.map(type =>
+                supabase.from('vitals')
+                    .select('recorded_at')
+                    .eq('metric_type', type)
+                    .order('recorded_at', { ascending: false })
+                    .limit(1)
+            )
+        );
+        metricTypes.forEach((type, i) => {
+            const row = cutoffQueries[i]?.data?.[0];
+            if (row) metricCutoffs[type] = row.recorded_at;
+        });
+        console.log('Per-metric cutoffs:');
+        Object.entries(metricCutoffs).forEach(([k, v]) => {
+            console.log(`   ${k}: skip everything before ${v.substring(0, 10)}`);
+        });
+    } catch (e) {
+        console.warn('Could not fetch metric cutoffs — will use --since date only.');
+    }
+
+    // Also fetch body_composition cutoffs
+    let bodyCutoffs = {};
+    try {
+        const bodyTypes = Object.values(METRIC_MAP).filter(m => m.table === 'body_composition').map(m => m.type);
+        const bCutoffQueries = await Promise.all(
+            bodyTypes.map(type =>
+                supabase.from('body_composition')
+                    .select('recorded_at')
+                    .eq('metric_type', type)
+                    .order('recorded_at', { ascending: false })
+                    .limit(1)
+            )
+        );
+        bodyTypes.forEach((type, i) => {
+            const row = bCutoffQueries[i]?.data?.[0];
+            if (row) bodyCutoffs[type] = row.recorded_at;
+        });
+    } catch (e) {}
+
     const parser = sax.createStream(true, { trim: true });
 
     let vitalsBatch = [];
     let bodyBatch = [];
-    const BATCH_SIZE = 100; // Free tier: keep small and slow to avoid Cloudflare 520s
+    const BATCH_SIZE = 200;
     let totalProcessed = 0;
     let totalUploaded = 0;
     let totalSkipped = 0;
@@ -160,11 +207,16 @@ async function importData() {
         const mapping = METRIC_MAP[attrs.type];
         if (!mapping) return;
 
+        const recordedAt = attrs.startDate || attrs.creationDate || '';
+        const recordDate = recordedAt.substring(0, 10);
+
         // Apply --since filter
-        if (sinceDate) {
-            const recordDate = (attrs.startDate || attrs.creationDate || '').substring(0, 10);
-            if (recordDate < sinceDate) { totalSkipped++; return; }
-        }
+        if (sinceDate && recordDate < sinceDate) { totalSkipped++; return; }
+
+        // Apply per-metric cutoff — skip anything already in DB for this metric
+        const cutoffs = mapping.table === 'vitals' ? metricCutoffs : bodyCutoffs;
+        const cutoff = cutoffs[mapping.type];
+        if (cutoff && recordedAt <= cutoff) { totalSkipped++; return; }
 
         let value = parseFloat(attrs.value);
         if (isNaN(value)) return;
