@@ -72,19 +72,20 @@ export default function DataCapture({ supabase, onDataAdded }) {
     const handlePhotoFile = async (file) => {
         if (!file) return;
 
-        const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
         if (!validTypes.includes(file.type)) {
             setMode('error');
-            setErrorMsg('Only JPEG, PNG, or WebP images are supported.');
+            setErrorMsg('Supported formats: JPEG, PNG, WebP, or PDF.');
             return;
         }
-        if (file.size > 10 * 1024 * 1024) {
+        const maxSize = file.type === 'application/pdf' ? 20 * 1024 * 1024 : 10 * 1024 * 1024;
+        if (file.size > maxSize) {
             setMode('error');
-            setErrorMsg('Image is too large (max 10MB). Try a smaller photo.');
+            setErrorMsg(`File too large (max ${file.type === 'application/pdf' ? '20MB' : '10MB'}).`);
             return;
         }
 
-        // Show preview
+        // Show preview — PDFs use object embed, images use img
         setPreviewUrl(URL.createObjectURL(file));
         setMode('processing');
 
@@ -92,8 +93,10 @@ export default function DataCapture({ supabase, onDataAdded }) {
             const base64 = await fileToBase64(file);
             let result;
 
+            const mimeType = file.type; // passes 'application/pdf' through to Gemini correctly
+
             if (activeModal === 'medicine') {
-                result = await scanMedicineLabel(base64, file.type);
+                result = await scanMedicineLabel(base64, mimeType);
                 setEditData({
                     drug_name: result.drug_name || '',
                     dose: result.dose || '',
@@ -104,7 +107,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
                     notes: '',
                 });
             } else if (activeModal === 'lab') {
-                result = await scanLabResults(base64, file.type);
+                result = await scanLabResults(base64, mimeType);
                 setEditData({
                     test_date: result.test_date || new Date().toISOString().split('T')[0],
                     lab_name: result.lab_name || '',
@@ -112,7 +115,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
                     notes: '',
                 });
             } else if (activeModal === 'ecg') {
-                result = await scanECGReport(base64, file.type);
+                result = await scanECGReport(base64, mimeType);
                 setEditData({
                     interpretation: result.interpretation || '',
                     heart_rate: result.heart_rate || '',
@@ -126,6 +129,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
                 });
             }
 
+            result._isPdf = (mimeType === 'application/pdf');
             setExtractedData(result);
 
             if (result.confidence && result.confidence < 0.5) {
@@ -414,13 +418,29 @@ export default function DataCapture({ supabase, onDataAdded }) {
         </div>
     );
 
+    // ─── Preview: image or PDF ───
+    const renderPreview = () => {
+        if (!previewUrl) return null;
+        // Check if it's a PDF by looking at the blob URL context via extractedData or by checking object URL
+        const isPdf = extractedData?._isPdf;
+        if (isPdf) {
+            return (
+                <div className="image-preview" style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '12px', textAlign: 'center', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '40px', marginBottom: '6px' }}>📄</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>PDF uploaded — Gemini is reading it</div>
+                </div>
+            );
+        }
+        return <div className="image-preview"><img src={previewUrl} alt="Scanned" /></div>;
+    };
+
     // ─── Medicine review form ───
     const renderMedicineReview = () => (
         <>
             <div className={`confidence-badge ${confidenceLevel(extractedData?.confidence || 0)}`}>
                 🤖 {confidenceLabel(extractedData?.confidence || 0)}
             </div>
-            {previewUrl && <div className="image-preview"><img src={previewUrl} alt="Scanned" /></div>}
+            {renderPreview()}
             <div className="review-form">
                 <div className="form-field">
                     <label>Drug Name</label>
@@ -460,7 +480,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
             <div className={`confidence-badge ${confidenceLevel(extractedData?.confidence || 0)}`}>
                 🤖 {confidenceLabel(extractedData?.confidence || 0)}
             </div>
-            {previewUrl && <div className="image-preview"><img src={previewUrl} alt="Scanned" /></div>}
+            {renderPreview()}
             <div className="review-form">
                 <div className="form-row">
                     <div className="form-field">
@@ -506,7 +526,7 @@ export default function DataCapture({ supabase, onDataAdded }) {
             <div className={`confidence-badge ${confidenceLevel(extractedData?.confidence || 0)}`}>
                 🤖 {confidenceLabel(extractedData?.confidence || 0)}
             </div>
-            {previewUrl && <div className="image-preview"><img src={previewUrl} alt="Scanned" /></div>}
+            {renderPreview()}
             <div className="review-form">
                 <div className="form-field">
                     <label>Interpretation</label>
@@ -715,7 +735,7 @@ node import-data.mjs ~/Downloads/apple_health_export\\ 2/export.xml`}
         if (mode === 'idle') {
             return (
                 <>
-                    {renderDropzone('image/jpeg,image/png,image/webp', 'JPEG, PNG, or WebP — max 10MB')}
+                    {renderDropzone('image/jpeg,image/png,image/webp,application/pdf', 'JPEG, PNG, WebP or PDF — max 20MB')}
                 </>
             );
         }
