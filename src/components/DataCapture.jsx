@@ -169,21 +169,42 @@ export default function DataCapture({ supabase, onDataAdded }) {
         }
     };
 
+    // Parse lab values that Gemini returns with prefixes like "< 0.04", "> 5", "≤ 2.1"
+    const parseLabValue = (raw) => {
+        if (raw === null || raw === undefined || raw === '') return null;
+        // Strip comparison operators, spaces, commas (European decimal)
+        const cleaned = String(raw).replace(/[<>≤≥~=\s]/g, '').replace(',', '.');
+        const num = parseFloat(cleaned);
+        return isNaN(num) ? null : num;
+    };
+
     const saveLabResults = async () => {
         setMode('saving');
         try {
-            const rows = (editData.results || []).map(r => ({
+            const allRows = (editData.results || []).map(r => ({
                 test_date: editData.test_date,
                 metric_type: r.metric_type,
-                value: Number(r.value),
+                value: parseLabValue(r.value),
                 unit: r.unit || 'mg/dL',
                 lab_name: editData.lab_name || null,
                 notes: editData.notes || null,
             }));
+
+            // Drop rows where value couldn't be parsed (e.g. purely text results)
+            const rows = allRows.filter(r => r.value !== null);
+            const skipped = allRows.length - rows.length;
+
+            if (rows.length === 0) {
+                setMode('error');
+                setErrorMsg('No numeric values found to save. Edit the values in the review form and remove any text like "<" or ">" before saving.');
+                return;
+            }
+
             const { error } = await supabase.from('lab_results').insert(rows);
             if (error) throw error;
             setMode('success');
             onDataAdded?.();
+            if (skipped > 0) console.warn(`${skipped} lab result(s) skipped — non-numeric value`);
             setTimeout(resetModal, 2000);
         } catch (err) {
             console.error('Save error:', err);
@@ -495,22 +516,46 @@ export default function DataCapture({ supabase, onDataAdded }) {
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                     Extracted Values ({(editData.results || []).length} found)
                 </label>
-                {(editData.results || []).map((r, i) => (
-                    <div key={i} className="lab-result-item">
-                        <span className="metric-name">{formatMetricName(r.metric_type)}</span>
-                        <input
-                            className="metric-value"
-                            value={r.value}
-                            onChange={e => {
-                                const updated = [...editData.results];
-                                updated[i] = { ...updated[i], value: e.target.value };
-                                setEditData({ ...editData, results: updated });
-                            }}
-                            style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: '6px', background: 'var(--bg-page)', color: 'var(--text-primary)', fontSize: '14px', textAlign: 'center' }}
-                        />
-                        <span className={`metric-flag ${r.flag || 'normal'}`}>{r.flag || 'normal'}</span>
-                    </div>
-                ))}
+                {(editData.results || []).map((r, i) => {
+                    // Warn if value has a prefix Gemini added (e.g. "< 0.04")
+                    const rawStr = String(r.value || '');
+                    const hasPrefix = /[<>≤≥~=]/.test(rawStr);
+                    const parsedOk = !isNaN(parseFloat(rawStr.replace(/[<>≤≥~=\s]/g, '')));
+                    return (
+                        <div key={i} className="lab-result-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="metric-name">{formatMetricName(r.metric_type)}</span>
+                                <input
+                                    className="metric-value"
+                                    value={r.value}
+                                    onChange={e => {
+                                        const updated = [...editData.results];
+                                        updated[i] = { ...updated[i], value: e.target.value };
+                                        setEditData({ ...editData, results: updated });
+                                    }}
+                                    style={{
+                                        padding: '6px 8px',
+                                        border: `1px solid ${hasPrefix ? '#ffaa00' : 'var(--border)'}`,
+                                        borderRadius: '6px', background: 'var(--bg-page)',
+                                        color: hasPrefix ? '#ffcc44' : 'var(--text-primary)',
+                                        fontSize: '14px', textAlign: 'center', flex: 1
+                                    }}
+                                />
+                                <span className={`metric-flag ${r.flag || 'normal'}`}>{r.flag || 'normal'}</span>
+                            </div>
+                            {hasPrefix && parsedOk && (
+                                <div style={{ fontSize: '11px', color: '#ffaa00', paddingLeft: '4px' }}>
+                                    ⚠️ Will save as {parseFloat(rawStr.replace(/[<>≤≥~=\s]/g, ''))} (stripped "{rawStr.match(/[<>≤≥~=]+/)?.[0]}" prefix)
+                                </div>
+                            )}
+                            {!parsedOk && (
+                                <div style={{ fontSize: '11px', color: '#ff6666', paddingLeft: '4px' }}>
+                                    ✗ Cannot parse as number — edit to a numeric value or this row will be skipped
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
                 {extractedData?.extraction_notes && (
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px' }}>
                         AI Note: {extractedData.extraction_notes}
