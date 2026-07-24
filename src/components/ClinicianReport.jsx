@@ -4,8 +4,11 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 
+import { getPatientProfile } from '../lib/patientProfile';
+
 export default function ClinicianReport({ summaries, clinicalData, latestVitals, latestBody, adherenceRate, medications }) {
     const reportRef = useRef(null);
+    const patient = getPatientProfile();
 
     const handlePrint = () => {
         window.print();
@@ -49,8 +52,8 @@ export default function ClinicianReport({ summaries, clinicalData, latestVitals,
                         </div>
                     </div>
                     <div className="patient-info">
-                        <div className="info-row"><span className="info-label">Patient:</span> <span className="info-value">Shahbaz</span></div>
-                        <div className="info-row"><span className="info-label">DOB:</span> <span className="info-value">15 May 1980 (45y)</span></div>
+                        <div className="info-row"><span className="info-label">Patient:</span> <span className="info-value">{patient.name}</span></div>
+                        <div className="info-row"><span className="info-label">DOB:</span> <span className="info-value">{patient.dobFormatted} ({patient.age}y)</span></div>
                         <div className="info-row"><span className="info-label">Report Date:</span> <span className="info-value">{new Date().toLocaleDateString('en-GB')}</span></div>
                         <div className="info-row"><span className="info-label">Period:</span> <span className="info-value">Last 90 Days</span></div>
                     </div>

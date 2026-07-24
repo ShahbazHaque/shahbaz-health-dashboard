@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { getPatientProfile, updatePatientDob } from './patientProfile.js';
 
 // Initialize the Gemini Client
 // WARNING: In a production app, the API key should NEVER be exposed to the client-side.
@@ -733,9 +734,20 @@ Smoking: Absolute cessation (if applicable)
  * Fallback Clinical Cardiology Expert Engine when Gemini API key is missing or encounters errors.
  * Provides accurate, personalized medical advice grounded in Shahbaz's actual patient data.
  */
-function getOfflineKuzburyResponse(message, history = [], patientContext = '') {
+async function getOfflineKuzburyResponse(message, history = [], patientContext = '') {
     const greeting = getTimeOfDayGreeting();
     const query = message.toLowerCase();
+
+    // Detect DOB update request: e.g. "The DOB is wrong. patient is 24 dec 1975. update your records."
+    if (query.includes('dob') || query.includes('date of birth') || query.includes('born') || query.includes('record')) {
+        const dateMatch = message.match(/(\d{1,2}\s+[a-zA-Z]+\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i);
+        if (dateMatch) {
+            const res = await updatePatientDob(dateMatch[0]);
+            return `${greeting}, Shahbaz. I have updated my clinical records.\n\n` +
+                `Your Date of Birth is now recorded as **${res.dobFormatted}** (Age: **${res.age} years old**).\n\n` +
+                `I have updated your clinical profile. Your age (${res.age}y) is now active across your health dashboard, AI daily briefings, and cardiovascular risk models.`;
+        }
+    }
 
     if (query.includes('condition') || query.includes('diagnosis') || query.includes('heart') || query.includes('disease') || query.includes('mi') || query.includes('infarction')) {
         return `${greeting}, Shahbaz. Dr. Kuzbury here.\n\n` +
@@ -827,6 +839,18 @@ If data is limited, say so briefly and suggest what to track.`
  * Accepts patientContext string to inject live data awareness.
  */
 export async function chatWithKuzbury(message, history = [], patientContext = '') {
+    const query = message.toLowerCase();
+    if (query.includes('dob') || query.includes('date of birth') || query.includes('born') || query.includes('record')) {
+        const dateMatch = message.match(/(\d{1,2}\s+[a-zA-Z]+\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i);
+        if (dateMatch) {
+            const res = await updatePatientDob(dateMatch[0]);
+            const greeting = getTimeOfDayGreeting();
+            return `${greeting}, Shahbaz. I have updated my clinical records.\n\n` +
+                `Your Date of Birth is now recorded as **${res.dobFormatted}** (Age: **${res.age} years old**).\n\n` +
+                `I have updated your clinical profile. Your age (${res.age}y) is now active across your health dashboard, AI daily briefings, and cardiovascular risk models.`;
+        }
+    }
+
     if (genAI) {
         try {
             const greeting = getTimeOfDayGreeting();
