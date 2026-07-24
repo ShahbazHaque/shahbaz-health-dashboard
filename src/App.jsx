@@ -480,12 +480,18 @@ export default function App() {
   const [latestVitals, setLatestVitals] = useState({});
   const [latestBody, setLatestBody] = useState({});
   const [hasData, setHasData] = useState(false);
+  const [dbError, setDbError] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
+    setDbError(null);
     try {
       // Fetch daily summaries (last 365 days, most recent first then reverse for charts)
-      const { data: sumData } = await supabase.from('daily_summary').select('*').order('date', { ascending: false }).limit(365);
+      const { data: sumData, error: sumError } = await supabase.from('daily_summary').select('*').order('date', { ascending: false }).limit(365);
+      if (sumError) {
+        console.error('Supabase daily_summary error:', sumError);
+        setDbError(sumError.message || 'Database fetch failed');
+      }
       setSummaries((sumData || []).reverse());
       setHasData((sumData || []).length > 0);
 
@@ -670,9 +676,23 @@ export default function App() {
           <button className="btn btn-primary" onClick={() => setShowUpload(true)}>
             📱 {hasData ? 'Update Data' : 'Import Apple Health'}
           </button>
-          {hasData && <button className="btn btn-secondary" onClick={loadData}>🔄 Refresh</button>}
+          <button className="btn btn-secondary" onClick={loadData}>🔄 Refresh</button>
         </div>
       </div>
+
+      {dbError && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.4)',
+          borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', color: '#ff6666'
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⚠️ Database Connection Error</div>
+          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+            Unable to connect to Supabase database (<strong>ajgeanhsqhzrwtwfrkdu.supabase.co</strong>): <em>{dbError}</em>
+            <br />
+            If your free-tier Supabase project is <strong>paused due to 7 days of inactivity</strong>, log into <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>Supabase Dashboard</a> and click <strong>Restore Project</strong>.
+          </p>
+        </div>
+      )}
 
       {!hasData ? (
         <div className="empty-state">
