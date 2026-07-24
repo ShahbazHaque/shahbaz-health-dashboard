@@ -339,6 +339,16 @@ export async function buildPatientContext(supabase) {
 }
 
 /**
+ * Helper to get time-of-day appropriate greeting based on local time.
+ */
+export function getTimeOfDayGreeting(date = new Date()) {
+    const hour = date.getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+}
+
+/**
  * Generate a proactive daily health briefing on app load.
  */
 export async function generateDailyBriefing(supabase) {
@@ -346,6 +356,8 @@ export async function generateDailyBriefing(supabase) {
 
     try {
         const context = await buildPatientContext(supabase);
+        const greeting = getTimeOfDayGreeting();
+        const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
@@ -358,13 +370,14 @@ Based on the live patient data provided, highlight:
 4. One actionable recommendation for today
 
 Tone: Warm, concise, clinically precise. Address him as "Shahbaz".
+IMPORTANT: The current local time is ${localTimeStr}. You MUST greet Shahbaz with "${greeting}" (e.g. "${greeting}, Shahbaz"). Do NOT say "Good morning" if the local time is in the afternoon or evening.
 Do NOT list every metric — only call out what matters today.
 Do NOT repeat raw numbers verbatim from the context — summarize meaningfully.
 If data is limited, say so briefly and suggest what to track.`
         });
 
         const result = await model.generateContent(
-            `Generate today's daily health briefing for Shahbaz.\n${context}`
+            `Generate today's health briefing for Shahbaz. Current local time is ${localTimeStr} (${greeting}).\n${context}`
         );
 
         return result.response.text();
@@ -601,9 +614,13 @@ export async function chatWithKuzbury(message, history = [], patientContext = ''
     }
 
     try {
+        const greeting = getTimeOfDayGreeting();
+        const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const timeContext = `\n[TIME CONTEXT — Current Local Time: ${localTimeStr} | Time-of-day Greeting: "${greeting}"]\nAlways greet with "${greeting}" if greeting the patient. Never say "Good morning" during the afternoon or evening.\n`;
+
         const fullSystemPrompt = patientContext
-            ? `${KUZBURY_SYSTEM_PROMPT}\n\n${patientContext}`
-            : KUZBURY_SYSTEM_PROMPT;
+            ? `${KUZBURY_SYSTEM_PROMPT}\n${timeContext}\n${patientContext}`
+            : `${KUZBURY_SYSTEM_PROMPT}\n${timeContext}`;
 
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",

@@ -8,7 +8,7 @@ import DataCapture from './components/DataCapture';
 import BPLogger from './components/BPLogger';
 import LabEntryForm from './components/LabEntryForm';
 import ExerciseLogger from './components/ExerciseLogger';
-import { generateDailyBriefing, generateAIInsights } from './lib/gemini';
+import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
@@ -730,7 +730,7 @@ export default function App() {
       {!hasData ? (
         <div className="empty-state">
           <img src={`${import.meta.env.BASE_URL}dr_kuzbury.jpg`} alt="Dr. Kuzbury" style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.1)', marginBottom: '24px' }} />
-          <h3>"Good morning Shahbaz, I'm Dr. Kuzbury."</h3>
+          <h3>"{getTimeOfDayGreeting()} Shahbaz, I'm Dr. Kuzbury."</h3>
           <p>Import your base historical vitals from Apple Health so I can begin formulating your N=1 clinical baseline and trajectory.</p>
           <button className="btn btn-primary" onClick={() => setShowUpload(true)} style={{ margin: '0 auto' }}>
             📱 Import Apple Health Data

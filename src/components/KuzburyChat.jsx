@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, WifiOff, Loader, Send } from 'lucide-react';
-import { extractVoiceLog, chatWithKuzbury, buildPatientContext } from '../lib/gemini';
+import { extractVoiceLog, chatWithKuzbury, buildPatientContext, getTimeOfDayGreeting } from '../lib/gemini';
 import './KuzburyChat.css';
 
 export default function KuzburyChat({ supabase }) {
@@ -12,7 +12,7 @@ export default function KuzburyChat({ supabase }) {
     const [patientContext, setPatientContext] = useState('');
 
     const [chatHistory, setChatHistory] = useState([
-        { role: 'model', text: "Good morning Shahbaz. I'm Dr. Kuzbury, your AI cardiologist. I'm loading your latest health data now — feel free to ask me anything about your cardiovascular health." }
+        { role: 'model', text: `${getTimeOfDayGreeting()} Shahbaz. I'm Dr. Kuzbury, your AI cardiologist. I'm loading your latest health data now — feel free to ask me anything about your cardiovascular health.` }
     ]);
 
     const recognitionRef = useRef(null);
