@@ -8,6 +8,7 @@ import DataCapture from './components/DataCapture';
 import BPLogger from './components/BPLogger';
 import LabEntryForm from './components/LabEntryForm';
 import ExerciseLogger from './components/ExerciseLogger';
+import WeightLogger from './components/WeightLogger';
 import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting, computeHealthScore } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
@@ -622,8 +623,13 @@ export default function App() {
   const liveHealthResult = useMemo(() => {
     const safeLabs = Array.isArray(labResults) ? labResults : [];
     const safeVitals = latestVitals || {};
+    const safeBody = latestBody || {};
     const ldlVal = safeLabs.find(l => l?.metric_type === 'ldl_cholesterol')?.value;
     const hba1cVal = safeLabs.find(l => l?.metric_type === 'hba1c')?.value;
+    const weightVal = safeBody.weight?.value ? parseFloat(safeBody.weight.value) : null;
+    const prevWeightVal = summaries.length > 7 ? summaries[summaries.length - 7]?.weight_kg : null;
+    const weightChange7d = (weightVal && prevWeightVal) ? Math.round((weightVal - prevWeightVal) * 10) / 10 : null;
+
     return computeHealthScore({
       adherenceRate,
       systolicBP: safeVitals.blood_pressure_systolic?.value,
@@ -634,8 +640,10 @@ export default function App() {
       hrv: safeVitals.hrv?.value,
       spo2: safeVitals.blood_oxygen?.value,
       steps: safeVitals.steps?.value,
+      weight: weightVal,
+      weightChange7d,
     });
-  }, [adherenceRate, latestVitals, labResults]);
+  }, [adherenceRate, latestVitals, latestBody, labResults, summaries]);
 
   const latestSummary = summaries.length ? summaries[summaries.length - 1] : null;
   const prevSummary = summaries.length > 1 ? summaries[summaries.length - 2] : null;
@@ -670,6 +678,9 @@ export default function App() {
 
   // Exercise Logger modal state
   const [showExerciseLogger, setShowExerciseLogger] = useState(false);
+
+  // Weight Logger modal state
+  const [showWeightLogger, setShowWeightLogger] = useState(false);
 
   // Build clinicalData from real lab_results table
   const clinicalData = useMemo(() => {
@@ -716,6 +727,7 @@ export default function App() {
   return (
     <div className="app-container">
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploadComplete={() => { setShowUpload(false); loadData(); }} />}
+      {showWeightLogger && <WeightLogger supabase={supabase} onClose={() => setShowWeightLogger(false)} onSaved={() => { setShowWeightLogger(false); loadData(); }} />}
 
       {/* Header */}
       <div className="header no-print">
@@ -727,6 +739,7 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
+          <button className="btn btn-secondary" onClick={() => setShowWeightLogger(true)}>⚖️ Log Weight</button>
           <button className="btn btn-primary" onClick={() => setShowUpload(true)}>
             📱 {hasData ? 'Update Data' : 'Import Apple Health'}
           </button>

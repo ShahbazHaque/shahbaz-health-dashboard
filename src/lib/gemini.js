@@ -305,6 +305,18 @@ export async function buildPatientContext(supabase) {
         // Calculate live score pillars for Dr. Kuzbury context
         const ldlVal = labs.find(l => l.metric_type === 'ldl_cholesterol')?.value;
         const hba1cVal = labs.find(l => l.metric_type === 'hba1c')?.value;
+        const weightVal = weight ? parseFloat(weight.value) : null;
+
+        // Calculate 7-day weight change
+        let weightChange7d = null;
+        if (body.length > 1 && weightVal) {
+            const weights7d = body.filter(b => b.metric_type === 'weight');
+            if (weights7d.length > 1) {
+                const prevW = weights7d[weights7d.length - 1]?.value;
+                if (prevW) weightChange7d = Math.round((weightVal - parseFloat(prevW)) * 10) / 10;
+            }
+        }
+
         const scoreCalc = computeHealthScore({
             adherenceRate,
             systolicBP: latestVitals.blood_pressure_systolic?.value,
@@ -315,6 +327,8 @@ export async function buildPatientContext(supabase) {
             hrv: latestVitals.hrv?.value,
             spo2: latestVitals.blood_oxygen?.value,
             steps: latestVitals.steps?.value,
+            weight: weightVal,
+            weightChange7d,
         });
 
         // Build context string
@@ -561,6 +575,8 @@ export function computeHealthScore(metrics = {}) {
         hrv = null,
         spo2 = null,
         steps = null,
+        weight = null,
+        weightChange7d = null,
     } = metrics;
 
     let scorePillars = {
@@ -630,14 +646,21 @@ export function computeHealthScore(metrics = {}) {
     }
     scorePillars.autonomic = hrvScore + spo2Score;
 
-    // Pillar 5: Daily Activity (5 pts max)
+    // Pillar 5: Daily Activity & Weight Trajectory (5 pts max, with fluid retention penalty)
+    let actBase = 2;
     if (steps !== null) {
-        if (steps >= 7500) scorePillars.activity = 5;
-        else if (steps >= 5000) scorePillars.activity = 3;
-        else scorePillars.activity = 1;
-    } else {
-        scorePillars.activity = 2;
+        if (steps >= 7500) actBase = 5;
+        else if (steps >= 5000) actBase = 3;
+        else actBase = 1;
     }
+
+    // Fluid retention penalty: >1.5 kg / 3.3 lbs gain over 7 days deducts 5 points
+    let weightPenalty = 0;
+    if (weightChange7d !== null && weightChange7d > 1.5) {
+        weightPenalty = -5;
+    }
+
+    scorePillars.activity = Math.max(0, actBase + weightPenalty);
 
     const totalScore = Math.max(0, Math.min(100, Math.round(
         scorePillars.adherence + scorePillars.bpRhr + scorePillars.biomarkers + scorePillars.autonomic + scorePillars.activity
