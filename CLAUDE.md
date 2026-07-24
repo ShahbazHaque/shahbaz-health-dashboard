@@ -270,4 +270,12 @@ Photo → Gemini Vision → meal description + metabolic risk flags. Write to `m
 - **⚠️ BLOCKED: Gemini API key is flagged/blocked by Google**
   - Old key was committed to public repo in COWORK_MIGRATION.md and HANDOVER.md (now redacted)
   - User must generate new key at https://aistudio.google.com and update Vercel env var VITE_GEMINI_API_KEY
-- **Next up:** Sprint 4.2 (Apple Health re-sync with --since flag) or Sprint 5.1 (Meal Photo Logging)
+- **Sprint 4.2 — Apple Health Incremental Re-Sync:** COMPLETE ✅
+  - `fetchMetricCutoffs()` in `App.jsx` & `DataCapture.jsx` queries latest recorded dates per metric to skip duplicate historical entries.
+- **Sprint 6 — Security & Polish:** COMPLETE ✅
+  - Supabase URL & Anon key read from `import.meta.env` with fallback defaults.
+  - `.env.local` configured.
+  - Orphaned `VoiceCapture.jsx` & `VoiceCapture.css` removed.
+  - Favicon (heart SVG) and page title ("Dr. Kuzbury — Personal AI Cardiologist") updated.
+  - Responsive mobile tab scrolling & header layout added.
+- **Next up:** Sprint 5.1 (Meal Photo Logging via Gemini Vision).

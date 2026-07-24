@@ -13,8 +13,8 @@ import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
 // Supabase config
-const SUPABASE_URL = 'https://ajgeanhsqhzrwtwfrkdu.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZ2VhbmhzcWh6cnd0d2Zya2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNzgwNjMsImV4cCI6MjA4Nzc1NDA2M30.YoVNvwuAsHFu0ncloquZXcAIP-P0El6YvJnAzQhtsoc';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ajgeanhsqhzrwtwfrkdu.supabase.co';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZ2VhbmhzcWh6cnd0d2Zya2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNzgwNjMsImV4cCI6MjA4Nzc1NDA2M30.YoVNvwuAsHFu0ncloquZXcAIP-P0El6YvJnAzQhtsoc';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Apple Health XML metric mapping
@@ -35,8 +35,50 @@ const METRIC_MAP = {
   'HKQuantityTypeIdentifierActiveEnergyBurned': { table: 'vitals', type: 'active_calories', unit: 'kcal' },
 };
 
-// Parse Apple Health XML
-async function parseAppleHealthXML(xmlText, onProgress) {
+// Fetch latest recorded_at per metric to support incremental sync
+async function fetchMetricCutoffs() {
+  const metricCutoffs = {};
+  const bodyCutoffs = {};
+
+  try {
+    const vitalTypes = Object.values(METRIC_MAP).filter(m => m.table === 'vitals').map(m => m.type);
+    const vitalCutoffQueries = await Promise.all(
+      vitalTypes.map(type =>
+        supabase.from('vitals')
+          .select('recorded_at')
+          .eq('metric_type', type)
+          .order('recorded_at', { ascending: false })
+          .limit(1)
+      )
+    );
+    vitalTypes.forEach((type, i) => {
+      const row = vitalCutoffQueries[i]?.data?.[0];
+      if (row) metricCutoffs[type] = row.recorded_at;
+    });
+
+    const bodyTypes = Object.values(METRIC_MAP).filter(m => m.table === 'body_composition').map(m => m.type);
+    const bodyCutoffQueries = await Promise.all(
+      bodyTypes.map(type =>
+        supabase.from('body_composition')
+          .select('recorded_at')
+          .eq('metric_type', type)
+          .order('recorded_at', { ascending: false })
+          .limit(1)
+      )
+    );
+    bodyTypes.forEach((type, i) => {
+      const row = bodyCutoffQueries[i]?.data?.[0];
+      if (row) bodyCutoffs[type] = row.recorded_at;
+    });
+  } catch (e) {
+    console.warn('Could not fetch metric cutoffs for incremental sync:', e);
+  }
+
+  return { metricCutoffs, bodyCutoffs };
+}
+
+// Parse Apple Health XML (with optional incremental cutoffs)
+async function parseAppleHealthXML(xmlText, onProgress, cutoffs = {}) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'text/xml');
   const records = doc.querySelectorAll('Record');
@@ -44,20 +86,32 @@ async function parseAppleHealthXML(xmlText, onProgress) {
   const bodyComp = [];
   const totalRecords = records.length;
   let processed = 0;
+  let skipped = 0;
+
+  const { metricCutoffs = {}, bodyCutoffs = {} } = cutoffs;
 
   records.forEach((record) => {
     const type = record.getAttribute('type');
     const mapping = METRIC_MAP[type];
     if (!mapping) return;
 
+    const recordedAt = record.getAttribute('startDate') || record.getAttribute('creationDate') || '';
+    const cutoffMap = mapping.table === 'vitals' ? metricCutoffs : bodyCutoffs;
+    const cutoff = cutoffMap[mapping.type];
+
+    if (cutoff && recordedAt <= cutoff) {
+      skipped++;
+      return;
+    }
+
     let value = parseFloat(record.getAttribute('value'));
     if (isNaN(value)) return;
 
     // Convert oxygen saturation from 0-1 to percentage
-    if (type === 'HKQuantityTypeIdentifierOxygenSaturation') value *= 100;
+    if (type === 'HKQuantityTypeIdentifierOxygenSaturation' && value <= 1) value *= 100;
 
     const entry = {
-      recorded_at: record.getAttribute('startDate') || record.getAttribute('creationDate'),
+      recorded_at: recordedAt,
       metric_type: mapping.type,
       value: Math.round(value * 100) / 100,
       unit: mapping.unit,
@@ -73,7 +127,7 @@ async function parseAppleHealthXML(xmlText, onProgress) {
     }
   });
 
-  return { vitals, bodyComp, totalParsed: vitals.length + bodyComp.length };
+  return { vitals, bodyComp, totalParsed: vitals.length + bodyComp.length, skipped };
 }
 
 // Upload to Supabase in batches
@@ -86,14 +140,14 @@ async function uploadToSupabase(vitals, bodyComp, onProgress) {
     const batch = vitals.slice(i, i + batchSize);
     await supabase.from('vitals').insert(batch);
     completedBatches++;
-    onProgress(50 + Math.round((completedBatches / totalBatches) * 45));
+    if (onProgress) onProgress(50 + Math.round((completedBatches / Math.max(1, totalBatches)) * 45));
   }
 
   for (let i = 0; i < bodyComp.length; i += batchSize) {
     const batch = bodyComp.slice(i, i + batchSize);
     await supabase.from('body_composition').insert(batch);
     completedBatches++;
-    onProgress(50 + Math.round((completedBatches / totalBatches) * 45));
+    if (onProgress) onProgress(50 + Math.round((completedBatches / Math.max(1, totalBatches)) * 45));
   }
 }
 
@@ -333,11 +387,21 @@ function UploadModal({ onClose, onUploadComplete }) {
         xmlText = await file.text();
       }
 
+      setProgress(10);
+      const cutoffs = await fetchMetricCutoffs();
+
       setProgress(15);
-      const { vitals, bodyComp, totalParsed } = await parseAppleHealthXML(xmlText, setProgress);
-      setStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: totalParsed });
+      const { vitals, bodyComp, totalParsed, skipped } = await parseAppleHealthXML(xmlText, setProgress, cutoffs);
+      setStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: totalParsed, skipped });
 
       if (totalParsed === 0) {
+        if (skipped > 0) {
+          // All data was already up to date!
+          setStatus('done');
+          setProgress(100);
+          setTimeout(() => onUploadComplete(), 1500);
+          return;
+        }
         setStatus('error');
         return;
       }

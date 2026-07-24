@@ -299,6 +299,35 @@ export default function DataCapture({ supabase, onDataAdded }) {
                 xmlText = await file.text();
             }
 
+            setAhProgress(10);
+            const metricCutoffs = {};
+            const bodyCutoffs = {};
+            try {
+                const vitalTypes = Object.values(METRIC_MAP).filter(m => m.table === 'vitals').map(m => m.type);
+                const vCutoffs = await Promise.all(
+                    vitalTypes.map(type =>
+                        supabase.from('vitals').select('recorded_at').eq('metric_type', type).order('recorded_at', { ascending: false }).limit(1)
+                    )
+                );
+                vitalTypes.forEach((type, idx) => {
+                    const row = vCutoffs[idx]?.data?.[0];
+                    if (row) metricCutoffs[type] = row.recorded_at;
+                });
+
+                const bodyTypes = Object.values(METRIC_MAP).filter(m => m.table === 'body_composition').map(m => m.type);
+                const bCutoffs = await Promise.all(
+                    bodyTypes.map(type =>
+                        supabase.from('body_composition').select('recorded_at').eq('metric_type', type).order('recorded_at', { ascending: false }).limit(1)
+                    )
+                );
+                bodyTypes.forEach((type, idx) => {
+                    const row = bCutoffs[idx]?.data?.[0];
+                    if (row) bodyCutoffs[type] = row.recorded_at;
+                });
+            } catch (e) {
+                console.warn('Could not fetch cutoffs:', e);
+            }
+
             setAhProgress(15);
 
             // Parse XML
@@ -309,18 +338,26 @@ export default function DataCapture({ supabase, onDataAdded }) {
             const vitals = [];
             const bodyComp = [];
             let processed = 0;
+            let skipped = 0;
 
             records.forEach((rec) => {
                 const type = rec.getAttribute('type');
                 const mapping = METRIC_MAP[type];
                 if (!mapping) return;
 
+                const recordedAt = rec.getAttribute('startDate') || rec.getAttribute('creationDate') || '';
+                const cutoff = mapping.table === 'vitals' ? metricCutoffs[mapping.type] : bodyCutoffs[mapping.type];
+                if (cutoff && recordedAt <= cutoff) {
+                    skipped++;
+                    return;
+                }
+
                 let val = parseFloat(rec.getAttribute('value'));
                 if (isNaN(val)) return;
                 if (mapping.type === 'blood_oxygen' && val <= 1) val = val * 100;
 
                 const entry = {
-                    recorded_at: rec.getAttribute('startDate'),
+                    recorded_at: recordedAt,
                     metric_type: mapping.type,
                     value: val,
                     unit: mapping.unit,
@@ -336,9 +373,15 @@ export default function DataCapture({ supabase, onDataAdded }) {
                 }
             });
 
-            setAhStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: processed });
+            setAhStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: vitals.length + bodyComp.length, skipped });
 
-            if (processed === 0) {
+            if (vitals.length + bodyComp.length === 0) {
+                if (skipped > 0) {
+                    setAhStatus('done');
+                    setAhProgress(100);
+                    onDataAdded?.();
+                    return;
+                }
                 setAhStatus('error');
                 return;
             }
