@@ -97,6 +97,8 @@ export default function GoogleHealthSync({ supabase, onClose, onSynced }) {
         }
     };
 
+    const [showGuide, setShowGuide] = useState(false);
+
     return (
         <div style={{
             position: 'fixed', inset: 0, zIndex: 1000,
@@ -196,6 +198,22 @@ export default function GoogleHealthSync({ supabase, onClose, onSynced }) {
                     </div>
                 ) : (
                     <form onSubmit={handleExchangeCode}>
+                        <div style={{ marginBottom: '16px', padding: '12px', borderRadius: '10px', background: 'var(--bg-page)', border: '1px solid var(--border)', fontSize: '12px', lineHeight: '1.6' }}>
+                            <div style={{ fontWeight: 600, color: '#60a5fa', marginBottom: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowGuide(!showGuide)}>
+                                <span>❓ Don't have credentials? Get them in 2 minutes</span>
+                                <span style={{ fontSize: '10px' }}>{showGuide ? '▲' : '▼'}</span>
+                            </div>
+                            {showGuide && (
+                                <ol style={{ margin: '8px 0 0 16px', padding: 0, color: 'var(--text-secondary)' }}>
+                                    <li>Go to <a href="https://dev.fitbit.com/apps/new" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>dev.fitbit.com/apps/new</a></li>
+                                    <li>App Name: <code>Dr Kuzbury</code> | Organization: <code>Personal</code></li>
+                                    <li>OAuth Application Type: Select <strong>Personal</strong> *(enables intraday HR)*</li>
+                                    <li>Callback URL: <code>http://localhost</code> | Default Access: <code>Read-Only</code></li>
+                                    <li>Click Save, then copy your <strong>Client ID</strong> & <strong>Client Secret</strong> below.</li>
+                                </ol>
+                            )}
+                        </div>
+
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
                             Enter your confidential <strong>Client ID</strong> & <strong>Client Secret</strong> from <a href="https://dev.fitbit.com" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>dev.fitbit.com</a>:
                         </div>
