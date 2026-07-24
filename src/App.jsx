@@ -8,7 +8,7 @@ import DataCapture from './components/DataCapture';
 import BPLogger from './components/BPLogger';
 import LabEntryForm from './components/LabEntryForm';
 import ExerciseLogger from './components/ExerciseLogger';
-import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting } from './lib/gemini';
+import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting, computeHealthScore } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
@@ -620,18 +620,20 @@ export default function App() {
 
   // Compute live 100-Point Post-MI Cardiovascular Recovery Index
   const liveHealthResult = useMemo(() => {
-    const ldlVal = labResults.find(l => l.metric_type === 'ldl_cholesterol')?.value;
-    const hba1cVal = labResults.find(l => l.metric_type === 'hba1c')?.value;
+    const safeLabs = Array.isArray(labResults) ? labResults : [];
+    const safeVitals = latestVitals || {};
+    const ldlVal = safeLabs.find(l => l?.metric_type === 'ldl_cholesterol')?.value;
+    const hba1cVal = safeLabs.find(l => l?.metric_type === 'hba1c')?.value;
     return computeHealthScore({
       adherenceRate,
-      systolicBP: latestVitals.blood_pressure_systolic?.value,
-      diastolicBP: latestVitals.blood_pressure_diastolic?.value,
-      restingHR: latestVitals.resting_heart_rate?.value,
+      systolicBP: safeVitals.blood_pressure_systolic?.value,
+      diastolicBP: safeVitals.blood_pressure_diastolic?.value,
+      restingHR: safeVitals.resting_heart_rate?.value,
       ldl: ldlVal ? parseFloat(ldlVal) : null,
       hba1c: hba1cVal ? parseFloat(hba1cVal) : null,
-      hrv: latestVitals.hrv?.value,
-      spo2: latestVitals.blood_oxygen?.value,
-      steps: latestVitals.steps?.value,
+      hrv: safeVitals.hrv?.value,
+      spo2: safeVitals.blood_oxygen?.value,
+      steps: safeVitals.steps?.value,
     });
   }, [adherenceRate, latestVitals, labResults]);
 
