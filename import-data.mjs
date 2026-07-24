@@ -344,12 +344,13 @@ async function recomputeSummaries(sinceDate) {
         const cal = sum(d.cal);
         const weight = bd.weight?.length ? avg(bd.weight) : null;
 
-        let score = 70;
-        if (avgRHR) score += avgRHR < 60 ? 10 : avgRHR < 70 ? 5 : avgRHR < 80 ? 0 : -10;
-        if (avgHRV) score += avgHRV > 50 ? 10 : avgHRV > 30 ? 5 : avgHRV > 20 ? 0 : -10;
-        if (stepCount) score += stepCount > 10000 ? 10 : stepCount > 7500 ? 7 : stepCount > 5000 ? 4 : 0;
-        if (avgSpo2) score += avgSpo2 >= 97 ? 5 : avgSpo2 >= 95 ? 0 : avgSpo2 >= 90 ? -10 : -20;
-        score = Math.max(0, Math.min(100, Math.round(score)));
+        // 100-Point Post-MI Recovery Index
+        let adherenceScore = 20; // baseline fallback
+        let bpRhrScore = (avgRHR && avgRHR >= 55 && avgRHR <= 65) ? 15 : (avgRHR ? 10 : 5);
+        let biomarkerScore = 18; // baseline
+        let autonomicScore = (avgHRV && avgHRV >= 40 ? 10 : 5) + (avgSpo2 && avgSpo2 >= 96 ? 5 : 2);
+        let actScore = (stepCount && stepCount >= 7500) ? 5 : 2;
+        let score = Math.max(0, Math.min(100, Math.round(adherenceScore + bpRhrScore + biomarkerScore + autonomicScore + actScore)));
 
         return {
             date,

@@ -69,11 +69,13 @@ async function computeSummaries() {
         const weight = avg(bd.weight || []);
         const bf = avg(bd.bf || []);
 
-        let score = 70;
-        if (rhr) { if (rhr < 60) score += 10; else if (rhr < 70) score += 5; else if (rhr > 85) score -= 10; }
-        if (hrvVal) { if (hrvVal > 50) score += 10; else if (hrvVal > 30) score += 5; else score -= 5; }
-        if (spo2) { if (spo2 > 97) score += 5; else if (spo2 < 94) score -= 15; }
-        score = Math.max(0, Math.min(100, score));
+        // 100-Point Post-MI Recovery Index
+        let adherenceScore = 20; // baseline fallback
+        let bpRhrScore = (rhr && rhr >= 55 && rhr <= 65) ? 15 : (rhr ? 10 : 5);
+        let biomarkerScore = 18; // baseline
+        let autonomicScore = (hrvVal && hrvVal >= 40 ? 10 : 5) + (spo2 && spo2 >= 96 ? 5 : 2);
+        let actScore = (sum(d.steps) && sum(d.steps) >= 7500) ? 5 : 2;
+        let score = Math.max(0, Math.min(100, Math.round(adherenceScore + bpRhrScore + biomarkerScore + autonomicScore + actScore)));
 
         return {
             date,

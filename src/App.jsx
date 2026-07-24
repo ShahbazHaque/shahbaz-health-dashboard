@@ -227,12 +227,14 @@ async function computeDailySummaries() {
     const weight = avg(bd.weight || []);
     const bf = avg(bd.bf || []);
 
-    // Health score: simple composite
-    let score = 70;
-    if (rhr) { if (rhr < 60) score += 10; else if (rhr < 70) score += 5; else if (rhr > 85) score -= 10; }
-    if (hrvVal) { if (hrvVal > 50) score += 10; else if (hrvVal > 30) score += 5; else score -= 5; }
-    if (spo2) { if (spo2 > 97) score += 5; else if (spo2 < 94) score -= 15; }
-    score = Math.max(0, Math.min(100, score));
+    // Health score: 100-Point Post-MI Cardiovascular Recovery Index
+    const scoreResult = computeHealthScore({
+      restingHR: rhr,
+      hrv: hrvVal,
+      spo2: spo2,
+      steps: sum(d.steps),
+    });
+    const score = scoreResult.totalScore;
 
     return {
       date,
@@ -611,9 +613,31 @@ export default function App() {
     });
   }, []);
 
+  // Lab results and medications state
+  const [labResults, setLabResults] = useState([]);
+  const [medications, setMedications] = useState([]);
+  const [adherenceRate, setAdherenceRate] = useState(null);
+
+  // Compute live 100-Point Post-MI Cardiovascular Recovery Index
+  const liveHealthResult = useMemo(() => {
+    const ldlVal = labResults.find(l => l.metric_type === 'ldl_cholesterol')?.value;
+    const hba1cVal = labResults.find(l => l.metric_type === 'hba1c')?.value;
+    return computeHealthScore({
+      adherenceRate,
+      systolicBP: latestVitals.blood_pressure_systolic?.value,
+      diastolicBP: latestVitals.blood_pressure_diastolic?.value,
+      restingHR: latestVitals.resting_heart_rate?.value,
+      ldl: ldlVal ? parseFloat(ldlVal) : null,
+      hba1c: hba1cVal ? parseFloat(hba1cVal) : null,
+      hrv: latestVitals.hrv?.value,
+      spo2: latestVitals.blood_oxygen?.value,
+      steps: latestVitals.steps?.value,
+    });
+  }, [adherenceRate, latestVitals, labResults]);
+
   const latestSummary = summaries.length ? summaries[summaries.length - 1] : null;
   const prevSummary = summaries.length > 1 ? summaries[summaries.length - 2] : null;
-  const healthScore = latestSummary?.health_score || 0;
+  const healthScore = liveHealthResult.totalScore || latestSummary?.health_score || 0;
 
   const formatDate = (d) => { if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
 
@@ -631,11 +655,6 @@ export default function App() {
     }
     return weeks.slice(-12);
   }, [summaries]);
-
-  // Lab results and medications state
-  const [labResults, setLabResults] = useState([]);
-  const [medications, setMedications] = useState([]);
-  const [adherenceRate, setAdherenceRate] = useState(null);
 
   // Daily briefing state
   const [dailyBriefing, setDailyBriefing] = useState(null);
@@ -790,6 +809,14 @@ export default function App() {
                 <div className="stat-item"><div className="stat-label">7-Day Avg</div><div className="stat-value">{Math.round(summaries.slice(-7).filter(s => s.health_score).reduce((a, s) => a + s.health_score, 0) / Math.max(1, summaries.slice(-7).filter(s => s.health_score).length))}</div></div>
                 <div className="stat-item"><div className="stat-label">30-Day Avg</div><div className="stat-value">{Math.round(summaries.slice(-30).filter(s => s.health_score).reduce((a, s) => a + s.health_score, 0) / Math.max(1, summaries.slice(-30).filter(s => s.health_score).length))}</div></div>
                 <div className="stat-item"><div className="stat-label">Best</div><div className="stat-value">{Math.max(...summaries.filter(s => s.health_score).map(s => s.health_score), 0)}</div></div>
+              </div>
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border)', fontSize: '11px', lineHeight: '1.8' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Recovery Pillars (100 pts):</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>💊 Meds Adherence:</span><strong style={{ color: '#10b981' }}>{liveHealthResult.pillars?.adherence ?? 0}/30</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🩺 BP & RHR:</span><strong style={{ color: '#3b82f6' }}>{liveHealthResult.pillars?.bpRhr ?? 0}/25</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🧪 Biomarkers (LDL/A1c):</span><strong style={{ color: '#8b5cf6' }}>{liveHealthResult.pillars?.biomarkers ?? 0}/25</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>🫁 HRV & SpO2:</span><strong style={{ color: '#06b6d4' }}>{liveHealthResult.pillars?.autonomic ?? 0}/15</strong></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>👟 Activity:</span><strong style={{ color: '#f59e0b' }}>{liveHealthResult.pillars?.activity ?? 0}/5</strong></div>
               </div>
             </div>
 
