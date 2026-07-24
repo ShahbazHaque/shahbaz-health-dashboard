@@ -9,6 +9,7 @@ import BPLogger from './components/BPLogger';
 import LabEntryForm from './components/LabEntryForm';
 import ExerciseLogger from './components/ExerciseLogger';
 import WeightLogger from './components/WeightLogger';
+import GoogleHealthSync from './components/GoogleHealthSync';
 import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting, computeHealthScore } from './lib/gemini';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
@@ -682,6 +683,9 @@ export default function App() {
   // Weight Logger modal state
   const [showWeightLogger, setShowWeightLogger] = useState(false);
 
+  // Google Health API Sync modal state
+  const [showGoogleHealthSync, setShowGoogleHealthSync] = useState(false);
+
   // Build clinicalData from real lab_results table
   const clinicalData = useMemo(() => {
     if (!labResults || labResults.length === 0) return [];
@@ -728,6 +732,7 @@ export default function App() {
     <div className="app-container">
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploadComplete={() => { setShowUpload(false); loadData(); }} />}
       {showWeightLogger && <WeightLogger supabase={supabase} onClose={() => setShowWeightLogger(false)} onSaved={() => { setShowWeightLogger(false); loadData(); }} />}
+      {showGoogleHealthSync && <GoogleHealthSync supabase={supabase} onClose={() => setShowGoogleHealthSync(false)} onSynced={() => { setShowGoogleHealthSync(false); loadData(); }} />}
 
       {/* Header */}
       <div className="header no-print">
@@ -739,6 +744,7 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
+          <button className="btn btn-secondary" onClick={() => setShowGoogleHealthSync(true)}>🌐 Google Health API</button>
           <button className="btn btn-secondary" onClick={() => setShowWeightLogger(true)}>⚖️ Log Weight</button>
           <button className="btn btn-primary" onClick={() => setShowUpload(true)}>
             📱 {hasData ? 'Update Data' : 'Import Apple Health'}

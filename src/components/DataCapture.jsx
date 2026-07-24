@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Camera, FileText, Heart, Activity, Loader, CheckCircle, AlertTriangle, X, Pill, Clipboard, Zap, Smartphone } from 'lucide-react';
 import { fileToBase64, scanMedicineLabel, scanLabResults, scanECGReport } from '../lib/gemini';
 import JSZip from 'jszip';
+import GoogleHealthSync from './GoogleHealthSync';
 import './DataCapture.css';
 
 // ─── Apple Health metric map (duplicated from App.jsx for self-containment) ───
@@ -25,6 +26,7 @@ const SCAN_TYPES = [
     { id: 'medicine', icon: '💊', title: 'Scan Medicine Label', desc: 'Snap a photo of your medicine box, bottle, or prescription label', badge: 'AI Vision', badgeClass: 'ai' },
     { id: 'lab', icon: '📋', title: 'Scan Lab Results', desc: 'Upload blood work, lipid panel, or any lab report photo/screenshot', badge: 'AI Vision', badgeClass: 'ai' },
     { id: 'ecg', icon: '📊', title: 'Scan ECG Report', desc: 'Upload ECG printout or cardiology report image', badge: 'AI Vision', badgeClass: 'ai' },
+    { id: 'google_health', icon: '🌐', title: 'Connect Google Health API', desc: 'Sync intraday Heart Rate, HRV, & Activity directly from Google Health / Fitbit API', badge: 'API Sync', badgeClass: 'manual' },
     { id: 'apple_health', icon: '📱', title: 'Upload Apple Health', desc: 'Import your latest vitals from iPhone Health app export (.zip)', badge: 'Import', badgeClass: '' },
     { id: 'bp', icon: '🩺', title: 'Quick BP Entry', desc: 'Log a blood pressure reading in under 30 seconds', badge: 'Manual', badgeClass: 'manual' },
 ];
@@ -892,8 +894,13 @@ node import-data.mjs ~/Downloads/apple_health_export\\ 2/export.xml`}
                 ))}
             </div>
 
-            {/* Modal */}
-            {activeModal && (
+            {/* Google Health Sync Modal */}
+            {activeModal === 'google_health' && (
+                <GoogleHealthSync supabase={supabase} onClose={resetModal} onSynced={() => { resetModal(); onDataAdded?.(); }} />
+            )}
+
+            {/* General Scan Modal */}
+            {activeModal && activeModal !== 'google_health' && (
                 <div className="scan-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) resetModal(); }}>
                     <div className="scan-modal">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
