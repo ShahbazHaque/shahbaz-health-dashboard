@@ -277,26 +277,18 @@ export default function DataCapture({ supabase, onDataAdded }) {
     const handleAppleHealthFile = async (file) => {
         if (!file) return;
 
-        // Files > 150 MB will crash the browser tab — route to CLI
-        const MB = file.size / (1024 * 1024);
-        if (MB > 150) {
-            setAhStatus('too_large');
-            setAhStats({ fileMB: Math.round(MB), fileName: file.name });
-            return;
-        }
-
         try {
             setAhStatus('parsing');
             setAhProgress(5);
 
-            let xmlText;
+            let targetBlob;
             if (file.name.endsWith('.zip')) {
                 const zip = await JSZip.loadAsync(file);
                 const xmlFile = Object.keys(zip.files).find(f => f.includes('export.xml'));
                 if (!xmlFile) throw new Error('Could not find export.xml in the zip file');
-                xmlText = await zip.files[xmlFile].async('string');
+                targetBlob = await zip.files[xmlFile].async('blob');
             } else {
-                xmlText = await file.text();
+                targetBlob = file;
             }
 
             setAhProgress(10);
@@ -330,48 +322,65 @@ export default function DataCapture({ supabase, onDataAdded }) {
 
             setAhProgress(15);
 
-            // Parse XML
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(xmlText, 'text/xml');
-            const records = doc.querySelectorAll('Record');
-
+            // Stream parse XML
             const vitals = [];
             const bodyComp = [];
-            let processed = 0;
             let skipped = 0;
 
-            records.forEach((rec) => {
-                const type = rec.getAttribute('type');
-                const mapping = METRIC_MAP[type];
-                if (!mapping) return;
+            const stream = targetBlob.stream ? targetBlob.stream() : null;
+            if (stream) {
+                const reader = stream.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let leftover = '';
+                const totalBytes = targetBlob.size || 1;
+                let readBytes = 0;
 
-                const recordedAt = rec.getAttribute('startDate') || rec.getAttribute('creationDate') || '';
-                const cutoff = mapping.table === 'vitals' ? metricCutoffs[mapping.type] : bodyCutoffs[mapping.type];
-                if (cutoff && recordedAt <= cutoff) {
-                    skipped++;
-                    return;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    readBytes += value.byteLength;
+                    setAhProgress(15 + Math.min(30, Math.round((readBytes / totalBytes) * 30)));
+
+                    const chunk = leftover + decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+                    leftover = lines.pop() || '';
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (!line.includes('<Record ')) continue;
+
+                        const typeMatch = line.match(/type="([^"]+)"/);
+                        if (!typeMatch) continue;
+                        const mapping = METRIC_MAP[typeMatch[1]];
+                        if (!mapping) continue;
+
+                        const dateMatch = line.match(/(?:startDate|creationDate)="([^"]+)"/);
+                        const recordedAt = dateMatch ? dateMatch[1] : '';
+                        const cutoff = mapping.table === 'vitals' ? metricCutoffs[mapping.type] : bodyCutoffs[mapping.type];
+                        if (cutoff && recordedAt <= cutoff) {
+                            skipped++;
+                            continue;
+                        }
+
+                        const valMatch = line.match(/value="([^"]+)"/);
+                        if (!valMatch) continue;
+                        let val = parseFloat(valMatch[1]);
+                        if (isNaN(val)) continue;
+                        if (mapping.type === 'blood_oxygen' && val <= 1) val = val * 100;
+
+                        const entry = {
+                            recorded_at: recordedAt,
+                            metric_type: mapping.type,
+                            value: Math.round(val * 100) / 100,
+                            unit: mapping.unit,
+                            source: 'apple_health',
+                        };
+
+                        if (mapping.table === 'vitals') vitals.push(entry);
+                        else bodyComp.push(entry);
+                    }
                 }
-
-                let val = parseFloat(rec.getAttribute('value'));
-                if (isNaN(val)) return;
-                if (mapping.type === 'blood_oxygen' && val <= 1) val = val * 100;
-
-                const entry = {
-                    recorded_at: recordedAt,
-                    metric_type: mapping.type,
-                    value: val,
-                    unit: mapping.unit,
-                    source: 'apple_health',
-                };
-
-                if (mapping.table === 'vitals') vitals.push(entry);
-                else bodyComp.push(entry);
-
-                processed++;
-                if (processed % 5000 === 0) {
-                    setAhProgress(15 + Math.min(35, Math.round((processed / records.length) * 35)));
-                }
-            });
+            }
 
             setAhStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: vitals.length + bodyComp.length, skipped });
 

@@ -77,55 +77,88 @@ async function fetchMetricCutoffs() {
   return { metricCutoffs, bodyCutoffs };
 }
 
-// Parse Apple Health XML (with optional incremental cutoffs)
-async function parseAppleHealthXML(xmlText, onProgress, cutoffs = {}) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, 'text/xml');
-  const records = doc.querySelectorAll('Record');
+// Parse Apple Health XML using streaming chunked reader (supports 2GB+ files without browser memory errors)
+async function parseAppleHealthStream(fileOrBlob, onProgress, cutoffs = {}) {
+  const { metricCutoffs = {}, bodyCutoffs = {} } = cutoffs;
   const vitals = [];
   const bodyComp = [];
-  const totalRecords = records.length;
-  let processed = 0;
   let skipped = 0;
 
-  const { metricCutoffs = {}, bodyCutoffs = {} } = cutoffs;
+  const stream = fileOrBlob.stream ? fileOrBlob.stream() : null;
+  if (!stream) {
+    // Fallback if stream() is unsupported
+    const xmlText = await fileOrBlob.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'text/xml');
+    const records = doc.querySelectorAll('Record');
+    records.forEach((record) => {
+      const type = record.getAttribute('type');
+      const mapping = METRIC_MAP[type];
+      if (!mapping) return;
+      const recordedAt = record.getAttribute('startDate') || record.getAttribute('creationDate') || '';
+      const cutoffMap = mapping.table === 'vitals' ? metricCutoffs : bodyCutoffs;
+      const cutoff = cutoffMap[mapping.type];
+      if (cutoff && recordedAt <= cutoff) { skipped++; return; }
+      let value = parseFloat(record.getAttribute('value'));
+      if (isNaN(value)) return;
+      if (type === 'HKQuantityTypeIdentifierOxygenSaturation' && value <= 1) value *= 100;
+      const entry = { recorded_at: recordedAt, metric_type: mapping.type, value: Math.round(value * 100) / 100, unit: mapping.unit, source: 'apple_health' };
+      if (mapping.table === 'vitals') vitals.push(entry); else bodyComp.push(entry);
+    });
+    return { vitals, bodyComp, totalParsed: vitals.length + bodyComp.length, skipped };
+  }
 
-  records.forEach((record) => {
-    const type = record.getAttribute('type');
-    const mapping = METRIC_MAP[type];
-    if (!mapping) return;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let leftover = '';
+  const totalBytes = fileOrBlob.size || 1;
+  let readBytes = 0;
 
-    const recordedAt = record.getAttribute('startDate') || record.getAttribute('creationDate') || '';
-    const cutoffMap = mapping.table === 'vitals' ? metricCutoffs : bodyCutoffs;
-    const cutoff = cutoffMap[mapping.type];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    readBytes += value.byteLength;
+    if (onProgress) onProgress(Math.min(45, Math.round((readBytes / totalBytes) * 45)));
 
-    if (cutoff && recordedAt <= cutoff) {
-      skipped++;
-      return;
+    const chunk = leftover + decoder.decode(value, { stream: true });
+    const lines = chunk.split('\n');
+    leftover = lines.pop() || '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.includes('<Record ')) continue;
+
+      const typeMatch = line.match(/type="([^"]+)"/);
+      if (!typeMatch) continue;
+      const mapping = METRIC_MAP[typeMatch[1]];
+      if (!mapping) continue;
+
+      const dateMatch = line.match(/(?:startDate|creationDate)="([^"]+)"/);
+      const recordedAt = dateMatch ? dateMatch[1] : '';
+      const cutoff = mapping.table === 'vitals' ? metricCutoffs[mapping.type] : bodyCutoffs[mapping.type];
+      if (cutoff && recordedAt <= cutoff) {
+        skipped++;
+        continue;
+      }
+
+      const valMatch = line.match(/value="([^"]+)"/);
+      if (!valMatch) continue;
+      let val = parseFloat(valMatch[1]);
+      if (isNaN(val)) continue;
+      if (mapping.type === 'blood_oxygen' && val <= 1) val = val * 100;
+
+      const entry = {
+        recorded_at: recordedAt,
+        metric_type: mapping.type,
+        value: Math.round(val * 100) / 100,
+        unit: mapping.unit,
+        source: 'apple_health',
+      };
+
+      if (mapping.table === 'vitals') vitals.push(entry);
+      else bodyComp.push(entry);
     }
-
-    let value = parseFloat(record.getAttribute('value'));
-    if (isNaN(value)) return;
-
-    // Convert oxygen saturation from 0-1 to percentage
-    if (type === 'HKQuantityTypeIdentifierOxygenSaturation' && value <= 1) value *= 100;
-
-    const entry = {
-      recorded_at: recordedAt,
-      metric_type: mapping.type,
-      value: Math.round(value * 100) / 100,
-      unit: mapping.unit,
-      source: 'apple_health',
-    };
-
-    if (mapping.table === 'vitals') vitals.push(entry);
-    else bodyComp.push(entry);
-
-    processed++;
-    if (processed % 5000 === 0 && onProgress) {
-      onProgress(Math.round((processed / totalRecords) * 50));
-    }
-  });
+  }
 
   return { vitals, bodyComp, totalParsed: vitals.length + bodyComp.length, skipped };
 }
@@ -376,22 +409,22 @@ function UploadModal({ onClose, onUploadComplete }) {
     try {
       setStatus('parsing');
       setProgress(5);
-      let xmlText;
+      let targetBlob;
 
       if (file.name.endsWith('.zip')) {
         const zip = await JSZip.loadAsync(file);
         const xmlFile = Object.keys(zip.files).find(f => f.includes('export.xml'));
         if (!xmlFile) throw new Error('Could not find export.xml in the zip file');
-        xmlText = await zip.files[xmlFile].async('string');
+        targetBlob = await zip.files[xmlFile].async('blob');
       } else {
-        xmlText = await file.text();
+        targetBlob = file;
       }
 
       setProgress(10);
       const cutoffs = await fetchMetricCutoffs();
 
       setProgress(15);
-      const { vitals, bodyComp, totalParsed, skipped } = await parseAppleHealthXML(xmlText, setProgress, cutoffs);
+      const { vitals, bodyComp, totalParsed, skipped } = await parseAppleHealthStream(targetBlob, setProgress, cutoffs);
       setStats({ vitals: vitals.length, bodyComp: bodyComp.length, total: totalParsed, skipped });
 
       if (totalParsed === 0) {
