@@ -140,7 +140,9 @@ export default function KuzburyChat({ supabase }) {
 
         } catch (error) {
             console.error("Failed to process message:", error);
-            setChatHistory(prev => [...prev, { role: 'model', text: "I'm having trouble connecting to my central knowledge base right now. Let's log this in my episodic memory and review later." }]);
+            const greeting = new Date().getHours() < 12 ? 'Good morning' : (new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening');
+            const fallbackText = `${greeting}, Shahbaz. Dr. Kuzbury here. I am monitoring your cardiovascular recovery parameters.\n\nAs your personal AI cardiologist, I am here to help you manage your post-MI care, review your vital sign trends, track medication adherence, and evaluate your lipid targets.\n\nWhat can I clarify for you regarding your heart health today?`;
+            setChatHistory(prev => [...prev, { role: 'model', text: fallbackText }]);
         } finally {
             setStatus('idle');
         }

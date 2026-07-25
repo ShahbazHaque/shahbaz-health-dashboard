@@ -866,7 +866,7 @@ If data is limited, say so briefly and suggest what to track.`
  * Chat with Dr. Kuzbury persona.
  * Accepts patientContext string to inject live data awareness.
  */
-export async function chatWithKuzbury(message, history = [], patientContext = '') {
+export async function chatWithKuzbury(message, history = [], patientContext = '', supabase = null) {
     const query = message.toLowerCase();
     if (query.includes('dob') || query.includes('date of birth') || query.includes('born') || query.includes('record')) {
         const dateMatch = message.match(/(\d{1,2}\s+[a-zA-Z]+\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i);
@@ -971,5 +971,5 @@ export async function chatWithKuzbury(message, history = [], patientContext = ''
         }
     }
 
-    return getOfflineKuzburyResponse(message, history, patientContext);
+    return getOfflineKuzburyResponse(message, history, patientContext, supabase);
 }
