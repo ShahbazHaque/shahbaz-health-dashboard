@@ -749,6 +749,34 @@ async function getOfflineKuzburyResponse(message, history = [], patientContext =
         }
     }
 
+    // Detect Weight update request: e.g. "update weight to 90KG for me", "set weight to 90 kg", "my weight is 90kg"
+    if (query.includes('weight') || query.includes('weigh') || query.includes('kg') || query.includes('kilos')) {
+        const weightMatch = message.match(/(?:weight|weigh|kg|kilos|scale).*?(\d{2,3}(?:\.\d)?)\s*(?:kg|kilos|kilograms)?/i) || message.match(/(\d{2,3}(?:\.\d)?)\s*(?:kg|kilos|kilograms)/i);
+        if (weightMatch) {
+            const weightVal = parseFloat(weightMatch[1]);
+            if (weightVal >= 30 && weightVal <= 300) {
+                let prevWeight = 86.6;
+                const prevMatch = patientContext.match(/Weight:\s*(\d+(?:\.\d+)?)\s*kg/i);
+                if (prevMatch) prevWeight = parseFloat(prevMatch[1]);
+
+                const diff = Math.round((weightVal - prevWeight) * 10) / 10;
+                const diffText = diff > 0 ? `+${diff} kg gain` : (diff < 0 ? `${diff} kg reduction` : 'no change');
+
+                let fluidWarning = '';
+                if (diff > 1.5) {
+                    fluidWarning = `\n\n⚠️ **Fluid Retention Alert:** Rapid weight gain of >1.5 kg (+${diff} kg) within a week can indicate fluid retention or early post-MI decompensation. Please monitor for any ankle swelling or breathlessness.`;
+                }
+
+                return `${greeting}, Shahbaz. I have recorded your updated weight as **${weightVal.toFixed(1)} kg**.\n\n` +
+                    `**Clinical Trajectory Analysis:**\n` +
+                    `• New Weight: **${weightVal.toFixed(1)} kg** (${new Date().toLocaleDateString('en-GB')})\n` +
+                    `• Trajectory: ${diffText} vs previous reading (${prevWeight} kg)` +
+                    `${fluidWarning}\n\n` +
+                    `Your 100-Point Recovery Index and daily briefings have been updated to reflect your new reading.`;
+            }
+        }
+    }
+
     if (query.includes('condition') || query.includes('diagnosis') || query.includes('heart') || query.includes('disease') || query.includes('mi') || query.includes('infarction')) {
         return `${greeting}, Shahbaz. Dr. Kuzbury here.\n\n` +
             `Your medical history includes Atherosclerotic Heart Disease (ASHD) of native coronary artery, chronic Ischaemic Heart Disease (IHD), prior myocardial infarction (OMI), and hyperlipidaemia.\n\n` +
@@ -848,6 +876,50 @@ export async function chatWithKuzbury(message, history = [], patientContext = ''
             return `${greeting}, Shahbaz. I have updated my clinical records.\n\n` +
                 `Your Date of Birth is now recorded as **${res.dobFormatted}** (Age: **${res.age} years old**).\n\n` +
                 `I have updated your clinical profile. Your age (${res.age}y) is now active across your health dashboard, AI daily briefings, and cardiovascular risk models.`;
+        }
+    }
+
+    // Detect Weight update request: e.g. "update weight to 90KG for me", "set weight to 90 kg", "my weight is 90kg"
+    if (query.includes('weight') || query.includes('weigh') || query.includes('kg') || query.includes('kilos')) {
+        const weightMatch = message.match(/(?:weight|weigh|kg|kilos|scale).*?(\d{2,3}(?:\.\d)?)\s*(?:kg|kilos|kilograms)?/i) || message.match(/(\d{2,3}(?:\.\d)?)\s*(?:kg|kilos|kilograms)/i);
+        if (weightMatch) {
+            const weightVal = parseFloat(weightMatch[1]);
+            if (weightVal >= 30 && weightVal <= 300) {
+                const greeting = getTimeOfDayGreeting();
+                let prevWeight = 86.6;
+                const prevMatch = patientContext.match(/Weight:\s*(\d+(?:\.\d+)?)\s*kg/i);
+                if (prevMatch) prevWeight = parseFloat(prevMatch[1]);
+
+                if (supabase) {
+                    try {
+                        await supabase.from('body_composition').insert([{
+                            recorded_at: new Date().toISOString(),
+                            metric_type: 'weight',
+                            value: Math.round(weightVal * 10) / 10,
+                            unit: 'kg',
+                            source: 'manual',
+                            notes: 'Logged via Dr. Kuzbury AI Chat'
+                        }]);
+                    } catch (err) {
+                        console.warn('Supabase weight insert notice:', err.message);
+                    }
+                }
+
+                const diff = Math.round((weightVal - prevWeight) * 10) / 10;
+                const diffText = diff > 0 ? `+${diff} kg gain` : (diff < 0 ? `${diff} kg reduction` : 'no change');
+
+                let fluidWarning = '';
+                if (diff > 1.5) {
+                    fluidWarning = `\n\n⚠️ **Fluid Retention Alert:** Rapid weight gain of >1.5 kg (+${diff} kg) within a week can indicate fluid retention or early post-MI decompensation. Please monitor for any ankle swelling or breathlessness.`;
+                }
+
+                return `${greeting}, Shahbaz. I have recorded your updated weight as **${weightVal.toFixed(1)} kg**.\n\n` +
+                    `**Clinical Trajectory Analysis:**\n` +
+                    `• New Weight: **${weightVal.toFixed(1)} kg** (${new Date().toLocaleDateString('en-GB')})\n` +
+                    `• Trajectory: ${diffText} vs previous reading (${prevWeight} kg)` +
+                    `${fluidWarning}\n\n` +
+                    `Your 100-Point Recovery Index and daily briefings have been updated to reflect your new reading.`;
+            }
         }
     }
 

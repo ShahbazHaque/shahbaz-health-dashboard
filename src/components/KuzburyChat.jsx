@@ -133,7 +133,7 @@ export default function KuzburyChat({ supabase }) {
             }).catch(e => console.error("Silent extraction failed:", e));
 
             // Execute Gemini Chat Inference with live patient context
-            const responseText = await chatWithKuzbury(userMessage, chatHistory, patientContext);
+            const responseText = await chatWithKuzbury(userMessage, chatHistory, patientContext, supabase);
 
             // Render Model Response
             setChatHistory(prev => [...prev, { role: 'model', text: responseText }]);
