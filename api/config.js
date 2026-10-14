@@ -6,10 +6,11 @@
 
 export const XAI_MODELS = {
   // Chat model - use for text generation, chat, insights
-  CHAT: 'grok-beta',
+  // grok-4.7 supports both text and vision (jpg/png image input)
+  CHAT: 'grok-4.7',
   
-  // Vision model - use for image analysis (medicine labels, lab reports, ECG)
-  VISION: 'grok-vision-beta',
+  // Vision model - grok-4.7 handles vision too (jpg/png image input)
+  VISION: 'grok-4.7',
 };
 
 export const XAI_CONFIG = {

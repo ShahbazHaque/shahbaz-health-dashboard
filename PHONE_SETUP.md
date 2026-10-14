@@ -69,17 +69,15 @@
 ### Step 4: Enable Security (1 minute)
 1. Still in Supabase, tap **SQL Editor** → **New Query**
 2. On your computer/tablet, go to the GitHub repo → `supabase-rls-migration.sql`
-3. **Select all text** → Copy
-4. Paste into SQL Editor on your phone
-5. Tap **Run**
-6. Wait for "Success. No rows returned."
-7. In the same SQL Editor, type this (replace with your actual email):
+3. **At the very top, find this line:**
    ```sql
-   UPDATE app_config 
-   SET owner_email = 'your@email.com', 
-       updated_at = NOW();
+   v_owner_email TEXT := 'YOUR_EMAIL_HERE@example.com';  -- ← EDIT THIS LINE ONLY
    ```
-8. Tap **Run** again
+4. Change `YOUR_EMAIL_HERE@example.com` to your actual email
+5. **Select all text** → Copy
+6. Paste into SQL Editor on your phone
+7. Tap **Run**
+8. Wait for "Success. No rows returned." and notice message showing your email
 
 ---
 
@@ -126,8 +124,7 @@ Your site is now:
 - Upgraded to latest xAI Grok models (`grok-beta`, `grok-vision-beta`)
 
 **Models now used:**
-- `grok-beta` — Chat, insights, daily briefing
-- `grok-vision-beta` — Medicine labels, lab reports, ECG scanning
+- `grok-4.7` — Latest model for chat, code, and vision (supports jpg/png image input)
 
 **RLS Migration:**
 - No manual UUID editing required

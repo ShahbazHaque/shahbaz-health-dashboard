@@ -80,40 +80,31 @@ If you previously had an xAI or Gemini API key committed to this repository:
 
 This is **CRITICAL** — without RLS, your health data is accessible to anyone with your Supabase URL.
 
-**✨ NEW: Phone-friendly migration — no manual editing required!**
+**✨ NEW: Phone-friendly migration — edit ONE line at the top, paste, and run!**
 
-1. **Open Supabase Dashboard:**
-   - Your Project → **SQL Editor** → **New Query**
-
-2. **Copy the entire migration:**
+1. **Open the migration file:**
    - Open `supabase-rls-migration.sql` from this repository
+   
+2. **Edit ONE line at the very top:**
+   - Find this line (near the top):
+   ```sql
+   v_owner_email TEXT := 'YOUR_EMAIL_HERE@example.com';  -- ← EDIT THIS LINE ONLY
+   ```
+   - Change `YOUR_EMAIL_HERE@example.com` to your actual email (the one from Step 3)
+
+3. **Copy and run:**
    - Select ALL text (Ctrl+A or Cmd+A)
    - Copy to clipboard
-
-3. **Paste and run:**
-   - Paste into Supabase SQL Editor
+   - Open Supabase Dashboard → Your Project → **SQL Editor** → **New Query**
+   - Paste the entire file
    - Click **Run**
    - Wait for "Success. No rows returned."
+   - You should see a notice: "Owner email set to: your@email.com"
 
-4. **Update owner email (one command):**
-   - In the same SQL Editor, run this single command:
-   ```sql
-   UPDATE app_config 
-   SET owner_email = 'your_actual_email@example.com', 
-       updated_at = NOW();
-   ```
-   - Replace `your_actual_email@example.com` with the email from Step 3
-
-5. **Verify it worked:**
-   - Run this query:
-   ```sql
-   SELECT owner_email FROM app_config;
-   ```
-   - Should return your email
-
-6. **Verify RLS is enabled:**
+4. **Verify it worked:**
    - Run the verification queries at the bottom of the migration file
    - All tables should show `rowsecurity = true`
+   - Check owner email: `SELECT owner_email FROM app_config;`
 
 ---
 

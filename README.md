@@ -170,11 +170,13 @@ node import-fitbit.mjs --client-id YOUR_ID --client-secret YOUR_SECRET
 
 | Function | Model | Endpoint |
 |----------|-------|----------|
-| **Chat** | `grok-beta` | `/api/chat` |
-| **Vision** | `grok-vision-beta` | `/api/scan-vision` |
-| **Insights** | `grok-beta` | `/api/generate-insights` |
-| **Daily Briefing** | `grok-beta` | `/api/daily-briefing` |
-| **Voice Extraction** | `grok-beta` | `/api/extract-voice` |
+| **Chat** | `grok-4.7` | `/api/chat` |
+| **Vision** | `grok-4.7` | `/api/scan-vision` |
+| **Insights** | `grok-4.7` | `/api/generate-insights` |
+| **Daily Briefing** | `grok-4.7` | `/api/daily-briefing` |
+| **Voice Extraction** | `grok-4.7` | `/api/extract-voice` |
+
+**Note:** grok-4.7 supports both text and vision (jpg/png image input)
 
 All AI calls are server-side Vercel functions — no API keys in the browser.
 

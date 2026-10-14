@@ -3,42 +3,51 @@
 -- Health Dashboard - Single Owner Security Model
 -- ============================================================================
 -- 
--- PHONE-FRIENDLY: Just paste and run - no manual editing required!
+-- PHONE-FRIENDLY: Edit one line below, paste entire file, and run!
 -- 
--- How it works:
--- 1. Create an app_config table with a single row storing the owner's email
--- 2. RLS policies check if auth.email() matches the owner email in app_config
--- 3. All health data is accessible only to the authenticated owner
---
--- Instructions:
--- 1. Create your auth user first: Supabase Dashboard > Authentication > Users > Add User
--- 2. Paste this ENTIRE file into: Supabase Dashboard > SQL Editor > New Query
--- 3. Click "Run" - that's it!
--- 
+-- ⚠️ STEP 1: SET YOUR EMAIL HERE (the email you'll use to log in):
 -- ============================================================================
 
--- Step 1: Create app_config table to store owner email
-CREATE TABLE IF NOT EXISTS app_config (
-    id BOOLEAN PRIMARY KEY DEFAULT TRUE,
-    owner_email TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT single_row CHECK (id = TRUE)
-);
+DO $$ 
+DECLARE
+    v_owner_email TEXT := 'YOUR_EMAIL_HERE@example.com';  -- ← EDIT THIS LINE ONLY
+BEGIN
+    -- Create app_config table to store owner email
+    CREATE TABLE IF NOT EXISTS app_config (
+        id BOOLEAN PRIMARY KEY DEFAULT TRUE,
+        owner_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT single_row CHECK (id = TRUE)
+    );
 
--- Insert placeholder owner email (update this after running the migration)
--- IMPORTANT: After running this migration, update the owner_email with your actual auth user email:
--- UPDATE app_config SET owner_email = 'your_actual_email@example.com', updated_at = NOW();
-INSERT INTO app_config (owner_email)
-VALUES ('PLACEHOLDER_EMAIL_UPDATE_AFTER_MIGRATION@example.com')
-ON CONFLICT (id) DO NOTHING;
+    -- Insert owner email (will fail silently if row already exists)
+    INSERT INTO app_config (owner_email)
+    VALUES (v_owner_email)
+    ON CONFLICT (id) DO UPDATE 
+    SET owner_email = v_owner_email, 
+        updated_at = NOW();
 
--- Disable RLS on app_config (it's a single-row config table, doesn't need RLS)
+    RAISE NOTICE 'Owner email set to: %', v_owner_email;
+END $$;
+
+-- ============================================================================
+-- Security: app_config is READ-ONLY for authenticated users
+-- ============================================================================
+
 ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Config readable by authenticated users" ON app_config;
 CREATE POLICY "Config readable by authenticated users" ON app_config
     FOR SELECT USING (auth.role() = 'authenticated');
 
--- Step 2: Helper function to check if current user is the owner
+-- No INSERT, UPDATE, or DELETE policies - only admins can modify via SQL
+-- This prevents any user (even the owner) from changing the owner email via the app
+
+-- ============================================================================
+-- Helper function to check if current user is the owner
+-- ============================================================================
+
 CREATE OR REPLACE FUNCTION is_owner()
 RETURNS BOOLEAN
 LANGUAGE SQL
@@ -51,24 +60,65 @@ AS $$
     );
 $$;
 
--- Step 3: Enable RLS on all health tables
-ALTER TABLE profile ENABLE ROW LEVEL SECURITY;
-ALTER TABLE vitals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE body_composition ENABLE ROW LEVEL SECURITY;
-ALTER TABLE daily_summary ENABLE ROW LEVEL SECURITY;
-ALTER TABLE health_insights ENABLE ROW LEVEL SECURITY;
-ALTER TABLE medications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE medication_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE lab_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ecg_results ENABLE ROW LEVEL SECURITY;
-ALTER TABLE exercise_log ENABLE ROW LEVEL SECURITY;
+-- ============================================================================
+-- Enable RLS on all health tables (with existence checks)
+-- ============================================================================
 
--- Step 4: Drop existing policies if any (idempotent)
 DO $$ 
 BEGIN
-    -- Profile
-    DROP POLICY IF EXISTS "Owner can view profile" ON profile;
-    DROP POLICY IF EXISTS "Owner can update profile" ON profile;
+    -- Enable RLS on each table if it exists
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'patient_profiles') THEN
+        ALTER TABLE patient_profiles ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'vitals') THEN
+        ALTER TABLE vitals ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'body_composition') THEN
+        ALTER TABLE body_composition ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'daily_summary') THEN
+        ALTER TABLE daily_summary ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'health_insights') THEN
+        ALTER TABLE health_insights ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'medications') THEN
+        ALTER TABLE medications ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'medication_log') THEN
+        ALTER TABLE medication_log ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'lab_results') THEN
+        ALTER TABLE lab_results ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'ecg_results') THEN
+        ALTER TABLE ecg_results ENABLE ROW LEVEL SECURITY;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'exercise_log') THEN
+        ALTER TABLE exercise_log ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
+
+-- ============================================================================
+-- Drop existing policies (idempotent)
+-- ============================================================================
+
+DO $$ 
+BEGIN
+    -- Patient profiles
+    DROP POLICY IF EXISTS "Owner can view patient_profiles" ON patient_profiles;
+    DROP POLICY IF EXISTS "Owner can insert patient_profiles" ON patient_profiles;
+    DROP POLICY IF EXISTS "Owner can update patient_profiles" ON patient_profiles;
+    DROP POLICY IF EXISTS "Owner can delete patient_profiles" ON patient_profiles;
     
     -- Vitals
     DROP POLICY IF EXISTS "Owner can view vitals" ON vitals;
@@ -125,16 +175,24 @@ BEGIN
     DROP POLICY IF EXISTS "Owner can delete exercise_log" ON exercise_log;
 END $$;
 
--- Step 5: Create owner-only policies using is_owner() function
+-- ============================================================================
+-- Create owner-only policies using is_owner() function
+-- ============================================================================
 
--- Profile table
-CREATE POLICY "Owner can view profile" ON profile
+-- Patient profiles table (full CRUD)
+CREATE POLICY "Owner can view patient_profiles" ON patient_profiles
     FOR SELECT USING (is_owner());
 
-CREATE POLICY "Owner can update profile" ON profile
+CREATE POLICY "Owner can insert patient_profiles" ON patient_profiles
+    FOR INSERT WITH CHECK (is_owner());
+
+CREATE POLICY "Owner can update patient_profiles" ON patient_profiles
     FOR UPDATE USING (is_owner());
 
--- Vitals table
+CREATE POLICY "Owner can delete patient_profiles" ON patient_profiles
+    FOR DELETE USING (is_owner());
+
+-- Vitals table (full CRUD)
 CREATE POLICY "Owner can view vitals" ON vitals
     FOR SELECT USING (is_owner());
 
@@ -147,7 +205,7 @@ CREATE POLICY "Owner can update vitals" ON vitals
 CREATE POLICY "Owner can delete vitals" ON vitals
     FOR DELETE USING (is_owner());
 
--- Body composition table
+-- Body composition table (full CRUD)
 CREATE POLICY "Owner can view body_composition" ON body_composition
     FOR SELECT USING (is_owner());
 
@@ -160,7 +218,7 @@ CREATE POLICY "Owner can update body_composition" ON body_composition
 CREATE POLICY "Owner can delete body_composition" ON body_composition
     FOR DELETE USING (is_owner());
 
--- Daily summary table
+-- Daily summary table (full CRUD)
 CREATE POLICY "Owner can view daily_summary" ON daily_summary
     FOR SELECT USING (is_owner());
 
@@ -173,7 +231,7 @@ CREATE POLICY "Owner can update daily_summary" ON daily_summary
 CREATE POLICY "Owner can delete daily_summary" ON daily_summary
     FOR DELETE USING (is_owner());
 
--- Health insights table
+-- Health insights table (full CRUD)
 CREATE POLICY "Owner can view health_insights" ON health_insights
     FOR SELECT USING (is_owner());
 
@@ -186,7 +244,7 @@ CREATE POLICY "Owner can update health_insights" ON health_insights
 CREATE POLICY "Owner can delete health_insights" ON health_insights
     FOR DELETE USING (is_owner());
 
--- Medications table
+-- Medications table (full CRUD)
 CREATE POLICY "Owner can view medications" ON medications
     FOR SELECT USING (is_owner());
 
@@ -199,7 +257,7 @@ CREATE POLICY "Owner can update medications" ON medications
 CREATE POLICY "Owner can delete medications" ON medications
     FOR DELETE USING (is_owner());
 
--- Medication log table
+-- Medication log table (full CRUD)
 CREATE POLICY "Owner can view medication_log" ON medication_log
     FOR SELECT USING (is_owner());
 
@@ -212,7 +270,7 @@ CREATE POLICY "Owner can update medication_log" ON medication_log
 CREATE POLICY "Owner can delete medication_log" ON medication_log
     FOR DELETE USING (is_owner());
 
--- Lab results table
+-- Lab results table (full CRUD)
 CREATE POLICY "Owner can view lab_results" ON lab_results
     FOR SELECT USING (is_owner());
 
@@ -225,7 +283,7 @@ CREATE POLICY "Owner can update lab_results" ON lab_results
 CREATE POLICY "Owner can delete lab_results" ON lab_results
     FOR DELETE USING (is_owner());
 
--- ECG results table
+-- ECG results table (full CRUD)
 CREATE POLICY "Owner can view ecg_results" ON ecg_results
     FOR SELECT USING (is_owner());
 
@@ -238,7 +296,7 @@ CREATE POLICY "Owner can update ecg_results" ON ecg_results
 CREATE POLICY "Owner can delete ecg_results" ON ecg_results
     FOR DELETE USING (is_owner());
 
--- Exercise log table
+-- Exercise log table (full CRUD)
 CREATE POLICY "Owner can view exercise_log" ON exercise_log
     FOR SELECT USING (is_owner());
 
@@ -252,20 +310,7 @@ CREATE POLICY "Owner can delete exercise_log" ON exercise_log
     FOR DELETE USING (is_owner());
 
 -- ============================================================================
--- Post-Migration: Update Owner Email
--- ============================================================================
--- Run this command separately AFTER creating your auth user:
--- 
--- UPDATE app_config 
--- SET owner_email = 'your_actual_email@example.com', 
---     updated_at = NOW();
---
--- Replace 'your_actual_email@example.com' with the email you used when 
--- creating the auth user in Step 1.
--- ============================================================================
-
--- ============================================================================
--- Verification queries (run AFTER updating owner_email)
+-- Verification queries (run AFTER the migration completes)
 -- ============================================================================
 
 -- Check that RLS is enabled on all tables
@@ -273,13 +318,13 @@ SELECT schemaname, tablename, rowsecurity
 FROM pg_tables 
 WHERE schemaname = 'public' 
 AND tablename IN (
-    'profile', 'vitals', 'body_composition', 'daily_summary', 
+    'patient_profiles', 'vitals', 'body_composition', 'daily_summary', 
     'health_insights', 'medications', 'medication_log', 
     'lab_results', 'ecg_results', 'exercise_log', 'app_config'
 )
 ORDER BY tablename;
 
--- Check owner email is set
+-- Check owner email is set correctly
 SELECT owner_email, created_at, updated_at FROM app_config;
 
 -- List all policies
@@ -289,6 +334,10 @@ WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
 
 -- ============================================================================
--- Success! RLS is now enabled with email-based owner verification.
--- No manual UUID editing required - just update the owner_email after running.
+-- Success! 
+-- ============================================================================
+-- RLS is now enabled with email-based owner verification.
+-- Owner email set at the top of this script - edit once, run once.
+-- app_config is read-only (no user can modify owner email via the app).
+-- All 10 health tables have full CRUD policies for the owner.
 -- ============================================================================

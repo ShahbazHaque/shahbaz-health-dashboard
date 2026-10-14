@@ -24,20 +24,21 @@
 - **Added package:** `openai` (for xAI OpenAI-compatible endpoint)
 - **Removed file:** `src/lib/gemini.js`
 - **Created file:** `src/lib/xai.js` (new client library)
-- **Models used:**
-  - `grok-2-1212` — Chat, insights, daily briefing
-  - `grok-2-vision-1212` — Vision tasks (medicine labels, lab reports, ECG)
+- **Created file:** `api/config.js` (centralized model configuration)
+- **Models used (latest as of Dec 2024):**
+  - `grok-4.7` — Latest model for chat and vision (supports both text and image input: jpg/png)
 
 ### 3. ✅ Moved All AI Calls to Server-Side (Vercel Functions)
 Created 5 serverless functions in `/api/`:
 
 | File | Purpose | Model |
 |------|---------|-------|
-| `chat.js` | Dr. Kuzbury chat | grok-2-1212 |
-| `scan-vision.js` | Image processing (medicine/lab/ECG) | grok-2-vision-1212 |
-| `generate-insights.js` | 90-day trend analysis | grok-2-1212 |
-| `daily-briefing.js` | Daily health summary | grok-2-1212 |
-| `extract-voice.js` | Voice transcription parsing | grok-2-1212 |
+| `config.js` | **Model configuration (single source of truth)** | XAI_MODELS constant |
+| `chat.js` | Dr. Kuzbury chat | grok-beta |
+| `scan-vision.js` | Image processing (medicine/lab/ECG) | grok-vision-beta |
+| `generate-insights.js` | 90-day trend analysis | grok-beta |
+| `daily-briefing.js` | Daily health summary | grok-beta |
+| `extract-voice.js` | Voice transcription parsing | grok-beta |
 
 **Security benefit:** No API keys ever shipped to the browser.
 
@@ -51,10 +52,15 @@ Created 5 serverless functions in `/api/`:
   - Blocks unauthorized access
   - Works with RLS policies
 
-### 5. ✅ Created Row-Level Security Migration
+### 5. ✅ Created Row-Level Security Migration (Phone-Friendly)
 - **Created:** `supabase-rls-migration.sql`
 - **Coverage:** All 10 health tables (profile, vitals, body_composition, etc.)
-- **Policy:** Owner-only access (must replace `YOUR_USER_ID_HERE` with actual UUID)
+- **New approach:** Email-based owner verification (no manual UUID editing!)
+- **How it works:**
+  - Creates `app_config` table with owner email
+  - Creates `is_owner()` function checking `auth.email()` against `app_config.owner_email`
+  - All policies use `is_owner()` instead of hardcoded UUID
+  - Just paste and run, then update email in one command
 - **Includes:** Verification queries to confirm RLS is enabled
 
 ### 6. ✅ Fixed Fake Medical Advice Fallback
