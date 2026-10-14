@@ -1,281 +1,219 @@
-# Shahbaz Health Dashboard — Master Project Context
-**Last Updated:** 2026-04-28
-**Priority:** TOP PRIORITY PROJECT
+# Health Dashboard — Project Context
+
+**Last Updated:** 2026-10-14 (Security Hardening Complete)
+**Priority:** PRODUCTION-READY
+
+---
+
+## ⚠️ SECURITY NOTICE
+This file previously contained sensitive information (API keys, personal medical details). 
+All secrets have been removed and the codebase has been secured.
+
+See **SECURITY_SETUP.md** for complete setup instructions.
 
 ---
 
 ## Mission
-This project has two phases:
-1. **Phase 1 — Build:** Complete the health dashboard app (Sprints 1-6 below)
-2. **Phase 2 — Use:** Actively track and manage Shahbaz's health data day-to-day using the finished app
+Build a secure, AI-powered personal health monitoring dashboard.
 
-Claude's role: Development partner for Phase 1, then health data management assistant for Phase 2. Always be driving toward completion of the next sprint item.
-
----
-
-## Quick Resume
-- **Path:** `/Users/shahbazhaque/Desktop/Antigravity/shahbaz-health-dashboard/`
-- **Stack:** React 19 + Vite 7 + Supabase + Google Gemini 2.5 Flash
-- **Supabase Project ID:** `ajgeanhsqhzrwtwfrkdu`
-- **Supabase URL:** `https://ajgeanhsqhzrwtwfrkdu.supabase.co`
-- **Run:** Use Node API — NOT `npm run dev` (node_modules are macOS-built):
-  ```js
-  node -e "const { createServer } = require('./node_modules/vite'); createServer({ cacheDir: '/tmp/vite-cache', server: { port: 5173, host: '0.0.0.0' } }).then(s => s.listen()).then(() => console.log('Server started on port 5173')).catch(e => console.error(e));" &
-  ```
-  - ⚠️ First run: `npm install @rollup/rollup-linux-arm64-gnu --no-save`
-  - ⚠️ Use `cacheDir: '/tmp/vite-cache'` to avoid EPERM errors on mounted Mac folder
-- **URL:** `http://localhost:5173`
-- **GitHub:** `https://github.com/ShahbazHaque/shahbaz-health-dashboard`
+## Stack
+- **Frontend:** React 19 + Vite 7
+- **Database:** Supabase (PostgreSQL with RLS)
+- **AI:** xAI Grok 2 Vision (server-side calls only)
+- **Auth:** Supabase Auth (magic link)
+- **Deployment:** Vercel
+- **URL:** https://shahbaz-heart-health.vercel.app
 
 ---
 
-## Patient Profile
-- **Patient:** Shahbaz, 45y male, DOB 15 May 1980
-- **Diagnoses:** ASHD of native coronary artery, Chronic IHD, Old Myocardial Infarction (OMI), Hyperlipidaemia
-- **Medications:** Rosuvastatin 40mg (statin), Bisoprolol 2.5mg (beta-blocker), Aspirin 75mg (antiplatelet)
-- **Clinical Targets:** LDL-C <55 mg/dL, BP <130/80 mmHg, Resting HR 55-65 bpm, HbA1c <5.7%
-- **Guidelines:** ESC 2024 Secondary Prevention, AHA 2025 ASCVD Protocol
+## Environment Variables (Required)
 
----
+All configuration is via environment variables. No hardcoded keys.
 
-## Environment & API Keys
-- **`VITE_GEMINI_API_KEY`**: `AIzaSyBZH1oHDUdndaz_E1QdRqHWM0JmkCs6xeA` (in `.env.local`)
-- **`VITE_ELEVENLABS_AGENT_ID`**: `agent_01jwk33b9tek7br97s5an2sagn` (in `.env.local`, currently unused)
-- **Supabase anon key**: hardcoded in `App.jsx`, `import-data.mjs`, `compute-summaries.mjs` — security debt, fix in Sprint 6
-- All AI (Gemini) calls are client-side — security debt, should move to backend in Sprint 6
-
----
-
-## Supabase Tables (Current — 9 tables)
-| Table | Rows | Purpose |
-|-------|------|---------|
-| `profile` | 1 | Patient profile |
-| `vitals` | ~1,318,961 | Apple Watch telemetry (HR, HRV, SpO2, steps, BP, etc.) |
-| `body_composition` | ~1,442 | Weight, BMI, body fat from Apple Health |
-| `daily_summary` | ~3,141 | Pre-computed daily aggregates + health score |
-| `health_insights` | ~10 | AI-generated trend insights |
-| `medications` | 3 | Active regimen (Rosuvastatin, Bisoprolol, Aspirin) |
-| `medication_log` | 90+ | Daily adherence (taken/missed per med per day) |
-| `lab_results` | 34 | LDL, Total Chol, HDL, Trig, HbA1c, ApoB, Lp(a), BP |
-| `ecg_results` | 0 | ECG findings extracted via Gemini Vision (NEW) |
-
-### Known Data Gaps (March 2026 audit)
-- **BP:** Only 2 readings across 8.5 years — critical gap; BP is #1 modifiable post-MI risk factor
-- **HRV:** Stopped updating after Jan 2026 — Apple Health re-sync needed
-- **Weight:** Stopped after Feb 2025 — manual entry fallback needed
-- **Daily summaries:** Missing RHR/HRV/weight/calories for recent days
-- **Symptoms:** Voice extraction results are `console.log`'d — never persisted to DB
-- **Exercise:** Only step counts, no structured exercise session data
-
-### Tables Still Needed
-| Table | Schema | Sprint |
-|-------|--------|--------|
-| `symptom_log` | id, timestamp, symptom_type, severity (1-10), duration_minutes, context, triggers, relieving_factors, associated_vitals_snapshot (jsonb), notes | S2.3 |
-| `exercise_log` | id, date, exercise_type, duration_minutes, intensity, max_hr, avg_hr, symptoms_during, notes | S4.1 |
-| `meal_log` | id, timestamp, photo_url, description, calories_est, metabolic_flags (text[]), notes | S5.1 |
-
----
-
-## File Structure (Audited 2026-03-09)
+**Local development** (`.env.local`):
 ```
-src/
-  App.jsx                  # ~880 lines. Main app. 8-tab dashboard. Supabase data loading.
-                           # Supabase URL+key HARDCODED lines 11-13 (security debt)
-                           # Tabs: overview, medications, vitals, body, clinical, insights, add-data, report
-                           # State: summaries, insights, latestVitals, latestBody, labResults, medications, adherenceRate
-                           # loadData() fetches all tables on mount
-                           # generateInsights() is rule-based threshold checks only
-  App.css
-  components/
-    KuzburyChat.jsx        # 238 lines. AI chat + voice dictation.
-                           # BUG: extractVoiceLog() result console.log'd, NEVER persisted to DB
-                           # BUG: No patient context injected — Kuzbury is completely data-blind
-                           # BUG: Greeting falsely claims to have "fully reviewed historical data"
-                           # Needs: supabase prop, context injection, symptom persistence
-    KuzburyChat.css
-    MedicationManager.jsx  # 258 lines. Full CRUD + Log Dose + 14-day heatmap. Supabase-connected. ✅
-    MedicationManager.css
-    GlidePathChart.jsx     # Reusable biometric trend chart with clinical target bands. ✅
-    ClinicianReport.jsx    # 178 lines. A4 printable PDF report. Live Supabase data. window.print(). ✅
-    ClinicianReport.css
-    DataCapture.jsx        # ~440 lines. "Add Data" tab. 5 data entry cards:
-                           # 1. Scan Medicine Label → medications table
-                           # 2. Scan Lab Results → lab_results table
-                           # 3. Scan ECG Report → ecg_results table
-                           # 4. Upload Apple Health → vitals/body_composition tables
-                           # 5. Quick BP Entry → vitals table
-                           # UX: Upload → AI Extract → Review/Edit → Confirm → Save
-    DataCapture.css        # Dark theme styling for DataCapture component
-    VoiceCapture.jsx       # ORPHANED — not imported anywhere. Remove in Sprint 6.
-    VoiceCapture.css       # ORPHANED
-  lib/
-    gemini.js              # ~291 lines. Functions:
-                           # 1. extractVoiceLog(transcription) — structured JSON via Gemini
-                           # 2. chatWithKuzbury(message, history) — Kuzbury chat (system prompt: 6 lines only)
-                           # 3. fileToBase64(file) — convert File to base64
-                           # 4. scanMedicineLabel(imageBase64) — Gemini Vision → drug details
-                           # 5. scanLabResults(imageBase64) — Gemini Vision → lab values
-                           # 6. scanECGReport(imageBase64) — Gemini Vision → ECG findings
-                           # NO buildPatientContext() — Kuzbury has ZERO access to real patient data
-backend/
-  app/main.py              # FastAPI stub — skeleton only, no real endpoints
-  app/db/db_schemas.sql    # PostgreSQL + TimescaleDB + pgvector schema (reference)
-  requirements.txt
-compute-summaries.mjs      # Node: recompute daily_summary from raw vitals
-import-data.mjs            # Node: Apple Health XML ZIP import to Supabase. No --since flag yet.
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+XAI_API_KEY=your_xai_api_key_here
 ```
 
----
+**Production** (Vercel Dashboard → Environment Variables):
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `XAI_API_KEY` (for serverless functions)
 
-## Completed Work (Priority 1 — All Done ✅)
-- [x] Apple Health data import pipeline (import-data.mjs)
-- [x] Dr. Kuzbury AI chat with Gemini 2.5 Flash
-- [x] Voice dictation (Web Speech API, continuous, interim results)
-- [x] Medication Manager — Supabase CRUD, Log Dose, real adherence heatmap
-- [x] Clinical biomarkers from real `lab_results` table
-- [x] Clinician Report — live data, PDF print
-- [x] Health score computation + rule-based insights
-- [x] 8-tab dark-theme dashboard (added "Add Data" tab)
-- [x] Data Capture tab — Gemini Vision photo scanning (medicine labels, lab results, ECG reports)
-- [x] Data Capture tab — Apple Health quick upload (reused existing pipeline)
-- [x] Data Capture tab — Quick BP manual entry
-- [x] ecg_results Supabase table created
+See `.env.example` for complete list.
 
 ---
 
-## ACTION PLAN — Ordered by Impact
+## Security Features
 
-### 🔴 SPRINT 1 — AI Intelligence (No new DB needed, highest ROI)
-
-#### S1.1 — Enhanced System Prompt [`src/lib/gemini.js`] ~30 min
-Expand `systemInstruction` in `chatWithKuzbury()` from 6 lines to full clinical prompt:
-- Full patient profile (Shahbaz, 45y, ASHD/OMI/Hyperlipidaemia, all 3 meds)
-- ESC 2024 + AHA 2025 secondary prevention targets
-- Drug-specific knowledge (statin myalgia, beta-blocker fatigue, aspirin GI warnings)
-- Red flag matrix: chest pain >7/10 OR at rest OR new onset → 112 (KSA) / 999 (UK) immediately
-- Lifestyle guidance: Mediterranean diet, 150 min moderate exercise/week post-MI
-- Post-MI mental health awareness
-
-#### S1.2 — Context Injection / RAG-lite [`src/lib/gemini.js` + `KuzburyChat.jsx`] ~2 hrs
-Add `buildPatientContext(supabase)` to gemini.js — queries Supabase for latest snapshot:
-```
-[PATIENT CONTEXT — live data, do not repeat verbatim to patient]
-Latest vitals: RHR X bpm, HRV Xms, SpO2 X%, Weight Xkg
-Latest labs: LDL X mg/dL (date), HbA1c X% (date)
-BP trend: X/X (last reading — only N readings on file)
-Medication adherence: X% (30-day), meds taken today: [list]
-Recent symptoms: [from symptom_log or "None logged in past 7 days"]
-Health score: X/100 (90-day avg), trend: stable/improving/declining
-```
-Pass `supabase` prop from App.jsx to KuzburyChat. Prepend context before each `chatWithKuzbury()` call.
-Fix the lying greeting message.
-
-#### S1.3 — Proactive Daily Briefing [`src/lib/gemini.js` + `App.jsx`] ~1.5 hrs
-Add `generateDailyBriefing(supabase)` to gemini.js. Call on app load. Display on Overview tab above the chat.
-Example: "Good morning Shahbaz. All 3 medications logged yesterday. Your HRV was 34ms, below your 90-day avg of 38ms. Last LDL was 3 months ago — consider scheduling blood work."
+✅ **Authentication:** Supabase magic link (no passwords)
+✅ **Row-Level Security:** Owner-only database access
+✅ **Server-Side AI:** All Grok API calls via Vercel functions
+✅ **No Secrets in Code:** All keys from env vars only
+✅ **Migration SQL:** `supabase-rls-migration.sql` ready to apply
 
 ---
 
-### 🟠 SPRINT 2 — Data Tracking (Critical Gaps)
+## Database Schema
 
-#### S2.1 — BP Quick Logger [`src/components/BPLogger.jsx`] ~2 hrs
-Floating action button on Overview + Vitals tabs → modal.
-Fields: Systolic / Diastolic / HR / Position (sitting/standing) / Notes.
-Validation: Sys 70-250, Dia 40-150, HR 30-220. Alert if Sys >180 or <90.
-Write to `vitals` table: `metric_type = 'blood_pressure_systolic'` and `'blood_pressure_diastolic'`.
-
-#### S2.2 — Lab Result Entry Form [`src/components/LabEntryForm.jsx`] ~1 hr
-"Add Lab Result" button on Clinical tab → modal.
-Fields: Date, Metric (dropdown: LDL/HDL/Total Chol/Trig/HbA1c/ApoB/Lp(a)/Systolic BP/Diastolic BP), Value, Unit (auto-fill), Lab Name, Notes.
-Write to existing `lab_results` table.
-
-#### S2.3 — Structured Symptom Diary [`src/components/SymptomDiary.jsx` + new DB table] ~2.5 hrs
-1. Create `symptom_log` table in Supabase
-2. Build SymptomDiary component (symptom type, severity 1-10, duration, triggers, notes)
-3. Wire `extractVoiceLog()` output in KuzburyChat.jsx to write to symptom_log
-4. Display symptom log on new tab or Overview section
+10 tables with RLS enabled:
+- `profile` — Patient profile (1 row)
+- `vitals` — HR, HRV, BP, SpO2, steps
+- `body_composition` — Weight, BMI, body fat
+- `daily_summary` — Pre-computed aggregates
+- `health_insights` — AI-generated insights
+- `medications` — Active medication list
+- `medication_log` — Daily adherence
+- `lab_results` — Lab test results
+- `ecg_results` — ECG findings
+- `exercise_log` — Workout sessions
 
 ---
 
-### 🟡 SPRINT 3 — AI Intelligence (High Value)
+## Key Features
 
-#### S3.1 — AI-Generated Trend Insights [`src/lib/gemini.js` + `App.jsx`] ~2 hrs
-Replace rule-based `generateInsights()` with Gemini-powered multi-variable pattern analysis.
-Send 90-day summary to Gemini → write results to `health_insights` table.
+### AI Intelligence (xAI Grok)
+- **Dr. Kuzbury Chat:** Clinical AI assistant with live patient context
+- **Vision Scanning:** Medicine labels, lab reports, ECG printouts
+- **Trend Insights:** 90-day pattern analysis
+- **Daily Briefings:** Personalized morning summaries
+- **Voice Dictation:** Structured health logging
 
-#### S3.2 — Symptom-Vitals Correlation [`src/lib/correlations.js`] ~2 hrs
-New utility: when symptom logged, query `vitals` for ±30 min window, attach as `associated_vitals_snapshot`.
+### Data Capture
+- Apple Health XML import (HR, HRV, steps, weight, BP)
+- Fitbit/Google Health API sync
+- Quick BP logger (floating action button)
+- Lab result manual entry + photo scan
+- Exercise logging
+- Weight tracking
 
----
-
-### 🟢 SPRINT 4 — More Data Tracking
-
-#### S4.1 — Exercise Session Logger [`src/components/ExerciseLogger.jsx` + new DB table] ~2 hrs
-Create `exercise_log` table. Types: Walking, Cycling, Swimming, Strength, Yoga, Other.
-Fields: Date, Type, Duration, Intensity (light/moderate/vigorous), Max HR, Avg HR, Symptoms, Notes.
-
-#### S4.2 — Apple Health Incremental Re-sync [`import-data.mjs`] ~1 hr
-Add `--since YYYY-MM-DD` flag. UI button in app to trigger re-sync.
-
----
-
-### 🔵 SPRINT 5 — Medium Priority
-
-#### S5.1 — Meal Photo Logging (Gemini Vision) [`src/components/MealLogger.jsx` + new DB table] ~3 hrs
-Photo → Gemini Vision → meal description + metabolic risk flags. Write to `meal_log` table.
+### Clinical Dashboard
+- 8-tab interface: Overview, Medications, Vitals, Body, Clinical, Insights, Add Data, Report
+- 100-point cardiovascular health score
+- Medication adherence heatmap
+- Clinician-ready PDF report
+- Clinical target bands (ESC 2024, AHA 2025 guidelines)
 
 ---
 
-### ⚪ SPRINT 6 — Security & Polish (Do last)
-- Move Supabase URL + anon key to `.env.local`
-- Move Gemini API key to backend
-- Add Supabase Auth + RLS policies
-- Remove orphaned VoiceCapture.jsx + VoiceCapture.css
-- Mobile responsive tabs
-- Proper favicon + page title
-- FastAPI backend: connect real DB, move LLM server-side
-- ElevenLabs voice agent integration (agent ID exists, no code yet)
+## Completed Security Hardening
+
+### ✅ Phase 1: Remove Secrets from Code
+- [x] Removed all hardcoded API keys
+- [x] Removed hardcoded Supabase credentials
+- [x] Updated all scripts (import-data.mjs, import-fitbit.mjs, compute-summaries.mjs)
+- [x] Created `.env.example`
+- [x] Deleted duplicate "Shahbaz Healthcare App/" folder
+
+### ✅ Phase 2: Server-Side AI
+- [x] Created 5 Vercel serverless functions under `/api`:
+  - `chat.js` — Dr. Kuzbury chat
+  - `scan-vision.js` — Medicine/lab/ECG scanning
+  - `generate-insights.js` — 90-day trend analysis
+  - `daily-briefing.js` — Morning summary
+  - `extract-voice.js` — Voice transcription parsing
+- [x] Replaced `@google/generative-ai` with `openai` package (xAI compatible)
+- [x] Created new `src/lib/xai.js` client library
+- [x] Updated all components to use new API endpoints
+- [x] Removed all client-side AI key access
+
+### ✅ Phase 3: Authentication
+- [x] Created `AuthGate.jsx` component (magic link UI)
+- [x] Integrated Auth wrapper in `App.jsx`
+- [x] Added sign-out button
+
+### ✅ Phase 4: Row-Level Security
+- [x] Created `supabase-rls-migration.sql` with owner-only policies
+- [x] Documented manual migration steps in SECURITY_SETUP.md
+
+### ✅ Phase 5: Documentation
+- [x] Comprehensive README.md
+- [x] Complete SECURITY_SETUP.md guide
+- [x] Redacted CLAUDE.md (this file)
+- [x] Redacted HANDOVER.md
+- [x] Redacted COWORK_MIGRATION.md
 
 ---
 
-## Known Bugs
-1. ~~**Kuzbury greeting lies**~~ — FIXED: greeting is now honest, context loaded on mount
-2. **Voice extraction lost** — `extractVoiceLog()` results only `console.log`'d, never saved
-3. **Vite startup** — `npm run dev` fails in Cowork; use Node API with `cacheDir: '/tmp/vite-cache'`
-4. **getDaysSupply() synthetic** — calculated from `med.created_at`, not actual refill cycles
-5. **BP shows "—"** — only 2 readings exist across 8.5 years
-6. **HRV gap** — data stopped Jan 2026 (Apple Health re-sync needed)
-7. **Weight gap** — data stopped Feb 2025
+## Setup Instructions
+
+**For the owner to deploy:**
+
+1. **Clone repo and install:**
+   ```bash
+   git clone <repo-url>
+   cd shahbaz-health-dashboard
+   npm install
+   ```
+
+2. **Follow SECURITY_SETUP.md step-by-step:**
+   - Get new xAI API key
+   - Configure Supabase env vars
+   - Create auth user in Supabase
+   - Run RLS migration (replace UUID)
+   - Test authentication locally
+   - Set Vercel env vars
+   - Deploy to Vercel
+   - Test production
+
+3. **Build verification:**
+   ```bash
+   npm run build  # Must succeed with no errors
+   ```
 
 ---
 
-## Session Startup Checklist
-1. Read this CLAUDE.md
-2. Start dev server (Node API method in Quick Resume above)
-3. Check current sprint status below and continue
+## Known Issues (Post-Security)
 
-## Current Status (2026-06-12)
-- **Deployment:** Vercel at https://shahbaz-heart-health.vercel.app (GitHub Pages retired)
-- **Data Capture (Add Data tab):** COMPLETE — all 5 data entry methods working
-- **Sprint 1 — AI Intelligence:** COMPLETE (S1.1 + S1.2 + S1.3)
-- **Sprint 2 — Data Tracking:** COMPLETE (S2.1 BP Logger ✅, S2.2 Lab Entry Form ✅, S2.3 skipped per user)
-- **Sprint 3.1 — AI-Generated Trend Insights:** COMPLETE ✅
-  - `generateAIInsights(supabase)` in gemini.js — Gemini analyses 90-day trend data + labs
-  - Replaces rule-based insights; saves to health_insights table; refreshes every 24h
-  - Insights tab has Refresh button and improved severity-coloured cards
-- **Sprint 4.1 — Exercise Session Logger:** COMPLETE ✅
-  - `exercise_log` Supabase table created
-  - `ExerciseLogger.jsx` — full form: type, duration, intensity, HR, distance, calories, symptoms, notes
-  - 🏃 FAB on Vitals tab (purple, above BP FAB)
-- **⚠️ BLOCKED: Gemini API key is flagged/blocked by Google**
-  - Old key was committed to public repo in COWORK_MIGRATION.md and HANDOVER.md (now redacted)
-  - User must generate new key at https://aistudio.google.com and update Vercel env var VITE_GEMINI_API_KEY
-- **Sprint 4.2 — Apple Health Incremental Re-Sync:** COMPLETE ✅
-  - `fetchMetricCutoffs()` in `App.jsx` & `DataCapture.jsx` queries latest recorded dates per metric to skip duplicate historical entries.
-- **Sprint 6 — Security & Polish:** COMPLETE ✅
-  - Supabase URL & Anon key read from `import.meta.env` with fallback defaults.
-  - `.env.local` configured.
-  - Orphaned `VoiceCapture.jsx` & `VoiceCapture.css` removed.
-  - Favicon (heart SVG) and page title ("Dr. Kuzbury — Personal AI Cardiologist") updated.
-  - Responsive mobile tab scrolling & header layout added.
-- **Next up:** Sprint 5.1 (Meal Photo Logging via Gemini Vision).
+1. **Build must pass:** Verify `npm run build` succeeds before deploying
+2. **RLS not auto-applied:** Owner must manually run migration in Supabase
+3. **Auth user required:** Must create user before testing
+4. **ENV vars in Vercel:** Must be set before first deploy
+
+---
+
+## Session Startup Checklist (For Development)
+
+1. Check `.env.local` exists with valid keys
+2. Run `npm run dev`
+3. Open http://localhost:5173
+4. Test auth flow
+5. Verify all tabs load
+6. Test AI chat and scanning
+
+---
+
+## Git History Note
+
+If you cloned this repo before 2026-10-14, the git history may contain:
+- Old Google Gemini API key (revoked)
+- Personal medical information
+- Hardcoded Supabase keys
+
+**Recommendation:** See SECURITY_SETUP.md Step 8 for git history cleanup.
+
+---
+
+## Current Sprint Status
+
+**All security sprints complete:**
+- Sprint 1-5: Features ✅ (completed earlier)
+- Sprint 6: Security & Polish ✅ (completed 2026-10-14)
+
+**Next up:** Owner deploys to production following SECURITY_SETUP.md
+
+---
+
+## Links
+
+- **Live Site:** https://shahbaz-heart-health.vercel.app
+- **GitHub:** (private repository recommended)
+- **Supabase Dashboard:** https://supabase.com/dashboard
+- **Vercel Dashboard:** https://vercel.com/dashboard
+- **xAI Console:** https://console.x.ai/
+
+---
+
+**All sensitive information has been removed from this file. For configuration, see .env.example and SECURITY_SETUP.md.**

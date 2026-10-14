@@ -12,10 +12,12 @@
   "dependencies": {
     "@elevenlabs/client": "^0.15.0",
     "@google/generative-ai": "^0.24.1",
+    "@supabase/auth-helpers-react": "^0.15.0",
     "@supabase/supabase-js": "^2.98.0",
     "dotenv": "^17.3.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.575.0",
+    "openai": "^7.33.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^3.7.0",

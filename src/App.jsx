@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadialBarChart, RadialBar, PieChart, Pie, Cell } from 'recharts';
+import AuthGate from './components/AuthGate';
 import KuzburyChat from './components/KuzburyChat';
 import MedicationManager from './components/MedicationManager';
 import GlidePathChart from './components/GlidePathChart';
@@ -10,13 +11,18 @@ import LabEntryForm from './components/LabEntryForm';
 import ExerciseLogger from './components/ExerciseLogger';
 import WeightLogger from './components/WeightLogger';
 import GoogleHealthSync from './components/GoogleHealthSync';
-import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting, computeHealthScore } from './lib/gemini';
+import { generateDailyBriefing, generateAIInsights, getTimeOfDayGreeting, computeHealthScore } from './lib/xai';
 import { createClient } from '@supabase/supabase-js';
 import JSZip from 'jszip';
 
-// Supabase config
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ajgeanhsqhzrwtwfrkdu.supabase.co';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZ2VhbmhzcWh6cnd0d2Zya2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxNzgwNjMsImV4cCI6MjA4Nzc1NDA2M30.YoVNvwuAsHFu0ncloquZXcAIP-P0El6YvJnAzQhtsoc';
+// Supabase config - read from environment variables only
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error('Missing Supabase configuration. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.');
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Apple Health XML metric mapping
@@ -507,6 +513,7 @@ function UploadModal({ onClose, onUploadComplete }) {
 // =================== MAIN APP ===================
 
 export default function App() {
+  const [session, setSession] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [showUpload, setShowUpload] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -729,7 +736,8 @@ export default function App() {
   }
 
   return (
-    <div className="app-container">
+    <AuthGate supabase={supabase} onAuthenticated={(s) => setSession(s)}>
+      <div className="app-container">
       {showUpload && <UploadModal onClose={() => setShowUpload(false)} onUploadComplete={() => { setShowUpload(false); loadData(); }} />}
       {showWeightLogger && <WeightLogger supabase={supabase} onClose={() => setShowWeightLogger(false)} onSaved={() => { setShowWeightLogger(false); loadData(); }} />}
       {showGoogleHealthSync && <GoogleHealthSync supabase={supabase} onClose={() => setShowGoogleHealthSync(false)} onSynced={() => { setShowGoogleHealthSync(false); loadData(); }} />}
@@ -1225,5 +1233,6 @@ export default function App() {
         />
       )}
     </div>
+    </AuthGate>
   );
 }

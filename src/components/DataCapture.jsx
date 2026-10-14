@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Camera, FileText, Heart, Activity, Loader, CheckCircle, AlertTriangle, X, Pill, Clipboard, Zap, Smartphone } from 'lucide-react';
-import { fileToBase64, scanMedicineLabel, scanLabResults, scanECGReport } from '../lib/gemini';
+import { fileToBase64, scanMedicineLabel, scanLabResults, scanECGReport } from '../lib/xai';
 import JSZip from 'jszip';
 import GoogleHealthSync from './GoogleHealthSync';
 import './DataCapture.css';

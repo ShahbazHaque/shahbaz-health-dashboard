@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, WifiOff, Loader, Send } from 'lucide-react';
-import { extractVoiceLog, chatWithKuzbury, buildPatientContext, getTimeOfDayGreeting } from '../lib/gemini';
+import { extractVoiceLog, chatWithKuzbury, buildPatientContext, getTimeOfDayGreeting } from '../lib/xai';
 import './KuzburyChat.css';
 
 export default function KuzburyChat({ supabase }) {
