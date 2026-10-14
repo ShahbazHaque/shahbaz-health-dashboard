@@ -170,11 +170,11 @@ node import-fitbit.mjs --client-id YOUR_ID --client-secret YOUR_SECRET
 
 | Function | Model | Endpoint |
 |----------|-------|----------|
-| **Chat** | `grok-2-1212` | `/api/chat` |
-| **Vision** | `grok-2-vision-1212` | `/api/scan-vision` |
-| **Insights** | `grok-2-1212` | `/api/generate-insights` |
-| **Daily Briefing** | `grok-2-1212` | `/api/daily-briefing` |
-| **Voice Extraction** | `grok-2-1212` | `/api/extract-voice` |
+| **Chat** | `grok-beta` | `/api/chat` |
+| **Vision** | `grok-vision-beta` | `/api/scan-vision` |
+| **Insights** | `grok-beta` | `/api/generate-insights` |
+| **Daily Briefing** | `grok-beta` | `/api/daily-briefing` |
+| **Voice Extraction** | `grok-beta` | `/api/extract-voice` |
 
 All AI calls are server-side Vercel functions — no API keys in the browser.
 

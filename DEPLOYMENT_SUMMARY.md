@@ -114,14 +114,22 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    - You need this for the next step
 
 ### Step 4: Enable Row-Level Security (RLS)
-1. Open the file `supabase-rls-migration.sql` in your local copy
-2. Find **every instance** of `'YOUR_USER_ID_HERE'` (40+ occurrences)
-3. Replace with your actual user UUID from Step 3
-4. Open [Supabase Dashboard](https://supabase.com/dashboard) → Your Project → **SQL Editor** → **New Query**
-5. Paste the entire updated SQL file
-6. **Click Run**
-7. Verify success: "Success. No rows returned"
-8. Run the verification query at the bottom to confirm RLS is enabled
+
+**✨ NEW: Phone-friendly — no manual editing required!**
+
+1. Open [Supabase Dashboard](https://supabase.com/dashboard) → Your Project → **SQL Editor** → **New Query**
+2. Open `supabase-rls-migration.sql` from the repo
+3. Copy the ENTIRE file
+4. Paste into SQL Editor
+5. **Click Run**
+6. Wait for "Success. No rows returned"
+7. Run this single command to set owner email:
+   ```sql
+   UPDATE app_config 
+   SET owner_email = 'your_actual_email@example.com', 
+       updated_at = NOW();
+   ```
+8. Verify: `SELECT owner_email FROM app_config;` should return your email
 
 ### Step 5: Redeploy Vercel (Trigger Build)
 The main branch was just updated, so Vercel should auto-deploy. If not:

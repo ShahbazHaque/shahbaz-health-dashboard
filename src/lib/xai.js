@@ -633,6 +633,7 @@ export async function chatWithKuzbury(message, history = [], patientContext = ''
     try {
         const timeContext = `\n[TIME CONTEXT — Current Local Time: ${localTimeStr} | Time-of-day Greeting: "${greeting}"]\nAlways greet with "${greeting}" if greeting the patient. Never say "Good morning" during the afternoon or evening.\n`;
         
+        // Models: grok-beta (chat), grok-vision-beta (vision) - updated Dec 2024
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { XAI_MODELS, XAI_CONFIG } from './config.js';
 
 const getClient = () => {
   const apiKey = process.env.XAI_API_KEY;
@@ -13,7 +14,7 @@ const getClient = () => {
   
   return new OpenAI({
     apiKey,
-    baseURL: 'https://api.x.ai/v1'
+    baseURL: XAI_CONFIG.baseURL
   });
 };
 
@@ -60,7 +61,7 @@ export default async function handler(req, res) {
     const client = getClient();
 
     const completion = await client.chat.completions.create({
-      model: 'grok-2-1212',
+      model: XAI_MODELS.CHAT,
       messages: [
         { role: 'system', content: INSIGHTS_SYSTEM_PROMPT },
         { 

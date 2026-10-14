@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { XAI_MODELS, XAI_CONFIG } from './config.js';
 
 // Initialize xAI Grok client with OpenAI-compatible endpoint
 const getClient = () => {
@@ -14,7 +15,7 @@ const getClient = () => {
   
   return new OpenAI({
     apiKey,
-    baseURL: 'https://api.x.ai/v1'
+    baseURL: XAI_CONFIG.baseURL
   });
 };
 
@@ -59,12 +60,12 @@ export default async function handler(req, res) {
       { role: 'user', content: message }
     ];
 
-    // Call Grok API (using grok-2-vision-1212 for general chat)
+    // Call Grok API
     const completion = await client.chat.completions.create({
-      model: 'grok-2-1212',
+      model: XAI_MODELS.CHAT,
       messages,
-      max_tokens: 500,
-      temperature: 0.7,
+      max_tokens: XAI_CONFIG.defaultMaxTokens,
+      temperature: XAI_CONFIG.defaultTemperature,
     });
 
     const reply = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response. Please try again.';

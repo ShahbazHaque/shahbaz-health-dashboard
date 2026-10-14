@@ -4,6 +4,7 @@
  */
 
 import OpenAI from 'openai';
+import { XAI_MODELS, XAI_CONFIG } from './config.js';
 
 const getClient = () => {
   const apiKey = process.env.XAI_API_KEY;
@@ -13,7 +14,7 @@ const getClient = () => {
   
   return new OpenAI({
     apiKey,
-    baseURL: 'https://api.x.ai/v1'
+    baseURL: XAI_CONFIG.baseURL
   });
 };
 
@@ -50,13 +51,13 @@ Do NOT repeat raw numbers verbatim from the context — summarize meaningfully.
 If data is limited, say so briefly and suggest what to track.`;
 
     const completion = await client.chat.completions.create({
-      model: 'grok-2-1212',
+      model: XAI_MODELS.CHAT,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `Generate today's health briefing. Current local time is ${localTimeStr} (${greeting}).\n${patientContext}` }
       ],
       max_tokens: 300,
-      temperature: 0.7,
+      temperature: XAI_CONFIG.defaultTemperature,
     });
 
     const briefing = completion.choices[0]?.message?.content || 'Unable to generate briefing at this time.';

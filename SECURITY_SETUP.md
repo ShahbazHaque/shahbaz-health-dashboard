@@ -71,9 +71,8 @@ If you previously had an xAI or Gemini API key committed to this repository:
    - **Auto Confirm User:** ✅ Yes
    - Click **Create User**
 
-3. **Copy the User UUID:**
-   - You'll see a UUID like `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
-   - **Save this UUID** — you need it for the next step
+3. **Note your email:**
+   - Remember the email you used — you'll need it in Step 4
 
 ---
 
@@ -81,42 +80,39 @@ If you previously had an xAI or Gemini API key committed to this repository:
 
 This is **CRITICAL** — without RLS, your health data is accessible to anyone with your Supabase URL.
 
+**✨ NEW: Phone-friendly migration — no manual editing required!**
+
 1. **Open Supabase Dashboard:**
    - Your Project → **SQL Editor** → **New Query**
 
-2. **Load the migration file:**
+2. **Copy the entire migration:**
    - Open `supabase-rls-migration.sql` from this repository
-   - Find **every instance** of `'YOUR_USER_ID_HERE'` (there are 40+ occurrences)
-   - Replace with the UUID you copied in Step 3:
-     ```sql
-     -- Before:
-     auth.uid() = 'YOUR_USER_ID_HERE'::uuid
-     
-     -- After:
-     auth.uid() = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'::uuid
-     ```
+   - Select ALL text (Ctrl+A or Cmd+A)
+   - Copy to clipboard
 
-3. **Review the SQL carefully:**
-   - Check that all 10 tables are covered:
-     - `profile`
-     - `vitals`
-     - `body_composition`
-     - `daily_summary`
-     - `health_insights`
-     - `medications`
-     - `medication_log`
-     - `lab_results`
-     - `ecg_results`
-     - `exercise_log`
-   - Each table should have 4 policies: SELECT, INSERT, UPDATE, DELETE (except `profile` which only needs SELECT/UPDATE)
-
-4. **Run the migration:**
-   - Paste the updated SQL into Supabase SQL Editor
+3. **Paste and run:**
+   - Paste into Supabase SQL Editor
    - Click **Run**
-   - Verify: "Success. No rows returned."
+   - Wait for "Success. No rows returned."
 
-5. **Verify RLS is enabled:**
-   - Run the verification query at the bottom of the migration file
+4. **Update owner email (one command):**
+   - In the same SQL Editor, run this single command:
+   ```sql
+   UPDATE app_config 
+   SET owner_email = 'your_actual_email@example.com', 
+       updated_at = NOW();
+   ```
+   - Replace `your_actual_email@example.com` with the email from Step 3
+
+5. **Verify it worked:**
+   - Run this query:
+   ```sql
+   SELECT owner_email FROM app_config;
+   ```
+   - Should return your email
+
+6. **Verify RLS is enabled:**
+   - Run the verification queries at the bottom of the migration file
    - All tables should show `rowsecurity = true`
 
 ---
@@ -250,7 +246,8 @@ Before going live, verify **ALL** items:
 ### Row-Level Security
 - [ ] RLS migration SQL reviewed and UUID replaced
 - [ ] Migration executed successfully in Supabase SQL Editor
-- [ ] All 10 tables show `rowsecurity = true`
+- [ ] Owner email updated with single UPDATE command
+- [ ] All 11 tables show `rowsecurity = true` (including app_config)
 - [ ] Policies created for all tables (40+ total policies)
 - [ ] Verification queries run successfully
 
